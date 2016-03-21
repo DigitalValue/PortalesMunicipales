@@ -1,0 +1,772 @@
+<?php
+
+define('PORTALES7_RESOURCEDIR', 'public://portales7-recursos');
+
+function portales7_modules_enabled($modules) {
+  foreach ($modules as $module) {
+    if (module_load_include('inc', 'portales7', 'includes/' . $module) && function_exists($module . '_post_enabled')) {
+      call_user_func($module . '_post_enabled');
+    }
+  }
+}
+
+function portales7_modules_disabled($modules) {
+  foreach ($modules as $module) {
+    if (module_load_include('inc', 'portales7', 'includes/' . $module) && function_exists($module . '_post_disabled')) {
+      call_user_func($module . '_post_disabled');
+    }
+  }
+}
+
+function portales7_modules_installed($modules) {
+  foreach ($modules as $module) {
+    if (module_load_include('inc', 'portales7', 'includes/' . $module) && function_exists($module . '_post_installed')) {
+      call_user_func($module . '_post_installed');
+    }
+  }
+}
+
+function portales7_query_alter(&$query) {
+  $is_search = FALSE;
+  foreach ($query->getTables() as $table) {
+    if ($table['table'] == 'search_index') {
+      $is_search = TRUE;
+    }
+  }
+
+  if ($is_search) {
+    foreach ($query->conditions() as $condition) {
+      if (is_object($condition['field']) && $condition['field'] instanceof DatabaseCondition) {
+        foreach($condition['field']->conditions() as $c2) {
+          if (!empty($c2['field']) && is_string($c2['field']) && ($c2['field'] == 'n.type')) {
+            return;
+          }
+        }
+      }
+    }
+    $query->condition('n.type', array_keys(variable_get('portales7_searchable_types', array('portales7_node' => 'portales7_node'))), 'IN');
+  }
+}
+
+function portales7_menu() {
+  $items['admin/dashboard/portales7'] = array (
+    'title' => 'Portales 7',
+    'description' => 'Portales 7 Configuration page',
+    'page callback' => 'drupal_get_form',
+    //'page arguments' => array('variable_module_form', 'portales7'),
+    'page arguments' => array('portales7_variables'),
+    'access arguments' => array('administer portales7 variables'),
+    'file' => 'portales7.variable.inc',
+    'type' => MENU_LOCAL_TASK,
+    'weight' => -100,
+  );
+  
+  $items['admin/dashboard/portales7/main'] = array(
+    'title' => 'Portales 7',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => -100,
+  );
+  $items['admin/dashboard/portales7/logos'] = array(
+    'title' => t('Logos'),
+    'type' => MENU_LOCAL_TASK,
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('portales7_logos'),
+    'access arguments' => array('administer portales7 variables'),
+    'file' => 'portales7.admin.inc',
+    'weight' => -50,
+  );
+  $items['admin/dashboard/portales7/internals'] = array(
+    'title' => 'Internal settings',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('portales7_internals_page'),
+    'file' => 'includes/internals.inc',
+    'type' => MENU_LOCAL_TASK,
+    'access arguments' => array('administer portales7'),
+  );
+  $items['admin/dashboard/portales7/p7vars'] = array(
+    'title' => 'Variables',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('portales7_p7vars_form'),
+    'file' => 'includes/p7vars.inc',
+    'type' => MENU_LOCAL_TASK,
+    'access arguments' => array('administer portales7'),
+  );
+  $items['admin/dashboard/portales7/home-switcher'] = array(
+    'title' => 'Home switcher',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('portales7_home_switch'),
+    'file' => 'includes/portada.inc',
+    'type' => MENU_LOCAL_TASK,
+    'access arguments' => array('switch portales7 home'),
+  );
+
+  if (module_exists('translation_overview')) {
+    $items['admin/dashboard/translation-overview-manage'] = array(
+      'title' => 'Translation overview',
+      'type' => MENU_LOCAL_TASK,
+      'description' => "View the translation status of the site's content.",
+      'page callback' => 'portales7_translation_overview_manager_page',
+      'access callback' => 'translation_overview_is_manager',
+    );
+  }
+  $items['admin/dashboard/imce'] = array(
+    'title' => 'File browser',
+    //'type' => MENU_LOCAL_TASK,
+    'type' => MENU_LOCAL_TASK,
+    'access arguments' => array('access content'),
+    'description' => 'View the file browser.',
+    'page callback' => 'portales7_imce_dashboard_integration',
+    'file' => '../imce/inc/imce.page.inc',
+  );
+  if (module_exists('phpmailer')) {
+    $phpmailer = phpmailer_menu();
+    $items['admin/dashboard/phpmailer'] = $phpmailer['admin/config/system/phpmailer'];
+    //$items['admin/dashboard/phpmailer']['title'] = 'Email settings';
+    $items['admin/dashboard/phpmailer']['type'] = MENU_LOCAL_TASK;
+    $items['admin/dashboard/phpmailer']['file'] = '../phpmailer/phpmailer.admin.inc';
+  }
+  if (module_exists('simplescheduler')) {
+    $ss = simplescheduler_menu();
+    $items['admin/dashboard/simplescheduler'] = $ss['admin/content/simplescheduler'];
+    $items['admin/dashboard/simplescheduler/scheduled'] = $ss['admin/content/simplescheduler/scheduled'];
+    $items['admin/dashboard/simplescheduler/success'] = $ss['admin/content/simplescheduler/success'];
+    $items['admin/dashboard/simplescheduler/fail'] = $ss['admin/content/simplescheduler/fail'];
+  }
+  $items['cookie-info'] = array(
+    'title' => 'Cookie information',
+    'access arguments' => array('access content'),
+    'page callback' => 'portales7_cookie_disclaimer',
+    'file' => 'portales7.pages.inc',
+    'type' => MENU_NORMAL_ITEM,
+  );
+  if (module_exists('dvimport')) {
+    $items['admin/dashboard/portales7/importnodes'] = array(
+      'title' => 'Import nodes from code',
+      'access arguments' => array('administer portales7'),
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('portales7_importnodes_form'),
+      'file' => 'portales7.import-nodes.inc',
+      'type' => MENU_LOCAL_TASK,
+      'weight' => 99,
+    );
+  }
+  return $items;
+}
+
+function portales7_menu_alter(&$items) {
+  $items['usuario'] = $items['user'];
+  $items['usuari'] = $items['user'];
+  $items['admin/content']['page callback'] = 'drupal_goto';
+  $items['admin/content']['page arguments'] = array('admin/dashboard/content');
+}
+
+function portales7_imce_dashboard_integration() {
+  global $user;
+  module_load_include('inc', 'imce', '/inc/imce.page');
+  if (imce_user_page_access($user)) {
+    return imce_user_page($user);
+  }
+  else {
+    drupal_set_message('unauthorized','error');
+  }
+}
+
+function portales7_translation_overview_manager_page(){
+  module_load_include('inc','translation_overview','translation_overview.pages');
+  return translation_overview_manager_page();
+}
+
+function portales7_main_page() {
+  $output = <<< EOD
+<p>Portales 7 es la nueva plataforma para la provisión de portales7
+desarrollada por Digital Value, SL.</p>
+<p>Para recibir información comercial póngase en contacto con 
+<a href="mailto:info@digitalvalue.es">info@digitalvalue.es</a></p>
+EOD;
+
+return $output;
+}
+
+/**
+* Implementation of hook_ctools_plugin_dierctory() to let the system know
+* where our content_type plugins are.
+*/
+function portales7_ctools_plugin_directory($module, $plugin) {
+    if ($module == 'ctools') {
+        return 'plugins/' . $plugin;
+    }
+}
+
+function portales7_get_formatters() {
+  $formatters = &drupal_static(__FUNCTION__);
+  if (!empty($formatters)) return $formatters;
+  
+  $formatters = array();
+  $pages = array();
+  $files = glob(dirname(__FILE__) . '/formatters/*.inc');
+  foreach($files as $file) {
+    $page = NULL;
+    include($file);
+    $formatters[$formatter['name']] = $formatter;
+  }
+  return $formatters;
+}
+
+function portales7_field_formatter_info() {
+  $formatters = array();
+  foreach(portales7_get_formatters() as $k => $f) {
+    $formatters[$k] = $f['info'];
+  }
+  return $formatters;
+}
+
+
+function portales7_field_formatter_settings_form($field, $instance, $view_mode, $form, &$form_state) {
+  //This gets the actual settings
+  $formatters = portales7_get_formatters();
+  $function = $instance['display'][$view_mode]['type'] . '_settings_form';
+  if (function_exists($function)) {
+    $form = call_user_func_array($function, array($field, $instance, $view_mode, $form, $form_state)); 
+  }
+  return $form;
+}
+
+
+/**
+ * Implements hook_field_formatter_settings_summary().
+ */
+function portales7_field_formatter_settings_summary($field, $instance, $view_mode) {
+  $summary = '';
+  $formatters = portales7_get_formatters();
+  $function = $instance['display'][$view_mode]['type'] . '_settings_summary';
+  if (function_exists($function)) {
+    $summary = call_user_func_array($function, array($field, $instance, $view_mode)); 
+  }
+  return $summary;
+}
+
+/**
+ * Implements hook_field_formatter_view().
+ */
+function portales7_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
+  $output = '';
+  $formatters = portales7_get_formatters();
+  $function = $display['type'] . '_view';
+  if (function_exists($function)) {
+    $output = call_user_func_array($function, array($entity_type, $entity, $field, $instance, $langcode, $items, $display)); 
+  }
+  return $output;
+}
+
+/**
+ * Implement hook_ctools_plugin_api().
+ */
+function portales7_ctools_plugin_api($module, $api) {
+  return array('version' => 1);
+}
+
+
+function portales7_image_default_styles() {
+  $styles = array();
+  foreach(array(50, 75, 100, 200, 300, 400, 500, 600, 700, 800, 900, 960) as $width){
+    $styles['imagen-' . $width] = array(
+      'name' => 'imagen-' . $width,
+      'label' => 'imagen-' . $width,
+      'effects' => array(
+        array(
+          'weight' => 1,
+          'name' => 'image_scale',
+          'data' => array(
+            'width' => $width,
+            'height' => '',
+            'upscale' => 1,
+          ),
+        ),
+      ),
+    );
+  }
+  foreach(array(100, 150, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200) as $width){
+    $styles['imagen-43-' . $width] = array(
+      'name' => 'imagen-43-' . $width,
+      'label' => 'imagen-43-' . $width,
+      'effects' => array(
+        array (
+          'label' => 'EPSA Image Crop',
+          'name' => 'epsacrop_crop',
+          'data' => array (
+            'width' => $width,
+            'height' => round($width * 0.75, 0),
+            'anchor' => 'left-top',
+            'jcrop_settings' => array(
+              'aspect_ratio' => '',
+              'bgcolor' => 'black',
+              'bgopacity' => '0.6',
+              'fallback' => 1,
+            ),
+          ),
+          'weight' => '-10',
+        ), 
+        array(
+          'weight' => 1,
+          'name' => 'image_scale',
+          'data' => array(
+            'width' => $width,
+            'height' => '',
+            'upscale' => 1,
+          ),
+        ),
+        array(
+          'weight' => 2,
+          'name' => 'image_crop',
+          'data' => array(
+            'width' => $width,
+            'height' => round($width * 0.75, 0),
+          ),
+        ),
+      ),
+    );
+  }
+  
+  $styles['a4-150x212'] = array(
+      'name' => 'a4-150x212',
+      'label' => 'a4-150x212',
+      'module' => NULL,
+      'effects' => array(
+        10 => array(
+          'label' => 'Scale',
+          'effect callback' => 'image_scale_effect',
+          'dimensions callback' => 'image_scale_dimensions',
+          'form callback' => 'image_scale_form',
+          'summary theme' => 'image_scale_summary',
+          'module' => 'image',
+          'name' => 'image_scale',
+          'data' => array(
+            'width' => 150,
+            'height' => 212,
+            'upscale' => 1,
+          ),
+          'weight' => 1,
+        ),
+        11 => array(
+          'label' => 'Define canvas',
+          'help' => 'Define the size of the working canvas and background color, this controls the dimensions of the output image.',
+          'effect callback' => 'canvasactions_definecanvas_effect',
+          'dimensions callback' => 'canvasactions_definecanvas_dimensions',
+          'form callback' => 'canvasactions_definecanvas_form',
+          'summary theme' => 'canvasactions_definecanvas_summary',
+          'module' => 'imagecache_canvasactions',
+          'name' => 'canvasactions_definecanvas',
+          'data' => array(
+            'RGB' => array(
+              'HEX' => '#ffffff',
+            ),
+            'under' => 1,
+            'exact' => array(
+              'width' => 150,
+              'height' => 212,
+              'xpos' => 'center',
+              'ypos' => 'center',
+            ),
+            'relative' => array(
+              'leftdiff' => '',
+              'rightdiff' => '',
+              'topdiff' => '',
+              'bottomdiff' => '',
+            ),
+          ),
+          'weight' => 2,
+        ),
+      ),
+    );
+  return $styles;
+}
+
+function portales7_form_variable_module_form_alter(&$form, &$form_state, $form_id) {
+  $form['#submit'][] = 'portales7_variables_submit';
+  return $form;
+}
+
+function portales7_variables_submit($form, &$form_state) {
+  global $user;
+  $file = file_load($form_state['values']['portales7_EL_site_logo']);
+  if (file_uri_scheme($file->uri) == 'temporary' || $file->status == FILE_STATUS_TEMPORARY) {
+    $file->status = FILE_STATUS_PERMANENT;
+    $dest = file_default_scheme() . '://' . $file->filename;
+    $file = file_move($file, $dest, FILE_EXISTS_REPLACE);
+    file_save($file); 
+    file_usage_add($file, 'portales7', 'settings', $user->uid);
+    $form_state['values']['portales7_EL_site_logo'] = $file->fid;
+    variable_set_value('portales7_EL_site_logo', $file->fid);
+  }
+}
+
+function portales7_theme($existing, $type, $theme, $path) {
+  return array(
+    'portales7_site_logo' => array(
+      'function' => 'theme_portales7_site_logo',
+      'arguments'=> array('style_name' => 'original'),
+    ),
+    'portales7_image_style_outside_files' => array(
+      'variables' => array(
+        'style_name' => NULL,
+        'path' => NULL,
+        'alt' => '',
+        'title' => NULL,
+        'attributes' => array(),
+      ),
+    ),
+  );
+}
+
+function theme_portales7_site_logo($variables) {
+  if ($file = file_load(variable_get_value('portales7_EL_site_logo'))){
+    $variables['path'] = $file->uri;
+    return theme('image_style', $variables);
+  }
+}
+
+/**
+ * This code is taken of
+ * http://www.pepperpotdesign.co.uk/blog/rendering-drupal-7-image-styles-outside-of-the-fil/
+ */
+function theme_portales7_image_style_outside_files($variables) {
+  $styled_path = image_style_path($variables['style_name'], $variables['path']);
+  if (!file_exists($styled_path)) {
+    $style = image_style_load($variables['style_name']);
+    image_style_create_derivative($style, $variables['path'], $styled_path);
+  }
+  $variables['path'] = $styled_path;
+  return theme('image', $variables);
+}
+
+
+function portales7_permission() {
+  return array(
+    'administer portales7 variables' => array(
+      'title' => 'Administer portales7 variables',
+      'description' => 'Allow setup of site related variables',
+    ),
+    'administer portales7' => array(
+      'title' => 'Administer portales7',
+    ),
+    'switch portales7 home' => array(
+      'title' => t('Switch between home variants'),
+    ),
+  );
+}
+
+function portales7_form_system_modules_alter(&$form, &$form_state){
+  $form['modules']['by Digital Value, SL']['#weight'] = 99;
+  $form['modules']['Portales 7 by Digital Value, SL.']['#weight'] = 100;
+  if (!empty($_REQUEST['expand'])) return TRUE;
+  foreach ($form['modules'] as $k => $v) {
+      if (!empty($v['#type']) && $v['#type'] == 'fieldset') {
+        $form['modules'][$k]['#collapsed'] = TRUE;
+      }
+    }
+  $form['modules']['Portales 7 by Digital Value, SL.']['#collapsed'] = FALSE;
+  $form['modules']['by Digital Value, SL']['#collapsed'] = FALSE;
+}
+
+function portales7_save_and_continue_submit(&$form, $form_state) {
+  if ($form_state['values']['op'] == $form_state['values']['san']) {
+    $type_url_str = str_replace('_', '-', $form['#bundle']);
+    $_GET['destination'] = 'node/add/'.$type_url_str;
+  }
+}
+
+function portales7_form_node_form_alter(&$form, &$form_state, $form_id) {
+  if (!empty($form['language'])) {
+    $form['language']['#description'] = t('Use "Language neutral" to make this content visible on all languages, if you select one language like "Spanish" or "Valencian", this content will only be visible when that language is active, so be sure to create the needed translations.');
+  }
+  $entity_info = entity_get_info('node');
+  $view_modes = $entity_info['view modes'];
+  $options_article = array('default' => t('Default'));
+  $options_entity = array('default' => t('Default'));
+  $view_mode_article = field_view_mode_settings('node', 'portales7_node');
+  $view_mode_entity = field_view_mode_settings('node', 'portales7_entity');
+  foreach ($view_modes as $view_mode_name => $view_mode_info) {
+    if (!empty($view_mode_article[$view_mode_name]['custom_settings']) && (strpos($view_mode_name, 'vinculo_') === FALSE)) {
+      $options_article[$view_mode_name] = $view_mode_info['label'];
+    }
+    if (!empty($view_mode_entity[$view_mode_name]['custom_settings']) && (strpos($view_mode_name, 'vinculo_') === FALSE)) {
+      $options_entity[$view_mode_name] = $view_mode_info['label'];
+    }
+  }
+  foreach (element_children($form['portales7_related_article']['und']) as $delta) {
+    $form['portales7_related_article']['und'][$delta]['portales7_fc_formatter']['und']['#options'] = $options_article;
+  }
+  
+  $entity_info = entity_get_info('field_collection_item');
+  $view_modes = $entity_info['view modes'];
+  $options_media = array('default' => t('Default'));
+  $view_mode_media = field_view_mode_settings('field_collection_item', 'portales7_media');
+  foreach ($view_modes as $view_mode_name => $view_mode_info) {
+    if (!empty($view_mode_media[$view_mode_name]['custom_settings'])) {
+      $options_media[$view_mode_name] = $view_mode_info['label'];
+    }
+  }
+  foreach (element_children($form['portales7_media']['und']) as $delta) {
+    $form['portales7_media']['und'][$delta]['portales7_fc_formatter']['und']['#options'] = $options_media;
+  }
+  
+  
+  foreach(element_children($form['portales7_related_entity']['und']) as $delta) {
+    $form['portales7_related_entity']['und'][$delta]['portales7_fc_formatter']['und']['#options'] = $options_entity;
+  }
+  $form['options']['#access'] = TRUE;
+  $form['actions']['san'] = array(
+  '#type' => 'submit',
+  '#value' => t('Save and new'),
+  '#submit' => array('node_form_submit', 'portales7_save_and_continue_submit'),
+  '#weight' => (!empty($form['actions']['preview']['#weight']) ? $form['actions']['preview']['#weight'] : $form['actions']['preview']['#weight']) + 1, 
+  );
+  $form['#submit'][] = 'portales7_save_and_continue_submit';
+  $form['pagination']['#group'] = 'additional_settings';
+  $form['pagination']['#weight'] = 99;
+}
+
+function portales7_preprocess_toolbar(&$variables) {
+  $info = drupal_parse_info_file(drupal_get_path('module', 'portales7') . '/portales7.info');
+  drupal_add_js("(function ($) {
+
+      Drupal.behaviors.portales7 = {
+        attach: function (context, settings) {
+          $('#toolbar-user', context).prepend('<li>" . t('Portales @ver', array('@ver' => $info['core'] . '-' . $info['version'])). "</li>');
+        }
+      };
+
+    }(jQuery));"
+  ,'inline');
+}
+
+//TODO: Fer que funcione la pujada de fichers i que accepte .css
+function portales7_form_system_theme_settings_alter(&$form, $form_state){
+  $form['custom_css'] = array(
+    '#type' => 'fieldset',
+    '#tree' => FALSE,
+    '#collapsible' => FALSE,
+    '#title' => 'Custom CSS',
+    '#weight' => -10,
+    '#access' => FALSE,
+  );
+  $form['custom_css']['portales7_css_file'] = array(
+    '#type' => 'managed_file',
+    '#title' => 'CSS file',
+    '#default_value' => theme_get_setting('portales7_css_file'),
+  );
+}
+
+/**
+ * Implements hook_entity_insert().
+ */
+function portales7_entity_insert($entity, $type) {
+  portales7_entity_update($entity, $type);
+}
+
+/**
+ * Implements hook_entity_update();
+ */
+function portales7_entity_update($entity, $type) {
+  if (module_exists('webform') && module_exists('recaptcha') && !empty($entity->webform)) {
+    list($id) = entity_extract_ids($type, $entity);
+    module_load_include('inc', 'captcha');
+    $form_id = 'webform_client_form_' . $id;
+    captcha_set_form_id_setting($form_id, 'reCAPTCHA');
+  }
+}
+
+/**
+ * Implements hook_entity_delete().
+ */
+function portales7_entity_delete($entity, $type) {
+  if (module_exists('webform') && module_exists('captcha') && !empty($entity->webform)) {
+    list($id) = entity_extract_ids($type, $entity);
+    module_load_include('inc', 'captcha');
+    $form_id = 'webform_client_form_' . $id;
+    captcha_set_form_id_setting($form_id, NULL);
+  }
+}
+
+function portales7_fc_formatters($field, $instance, $entity_type, $entity, $reset = FALSE) {
+  $view_modes = ds_entity_view_modes('node');
+  $out = array('default' => t('Default'));
+  foreach ($view_modes as $k => $v){
+    $out[$k] = $v['label'];
+  }
+  $view_modes = ds_entity_view_modes('field_collection_item');
+  foreach ($view_modes as $k => $v){
+    $out[$k] = $v['label'];
+  }
+  return $out;
+}
+
+/**
+ * Implements hook_ds_views_modes_info().
+ */
+function portales7_ds_view_modes_info() {
+  $ds_view_modes = array();
+  $ds_view_mode = new stdClass;
+  $ds_view_mode->disabled = FALSE; /* Edit this to true to make a default ds_view_mode disabled initially */
+  $ds_view_mode->api_version = 1;
+  $ds_view_mode->view_mode = 'link';
+  $ds_view_mode->label = 'Link';
+  $ds_view_mode->entities = array(
+    'node' => 'node',
+  );
+  $ds_view_modes[$ds_view_mode->view_mode] = $ds_view_mode;
+  
+  $ds_view_mode = new stdClass;
+  $ds_view_mode->disabled = FALSE; /* Edit this to true to make a default ds_view_mode disabled initially */
+  $ds_view_mode->api_version = 1;
+  $ds_view_mode->view_mode = 'portales7_entity_person';
+  $ds_view_mode->label = 'Person';
+  $ds_view_mode->entities = array(
+    'node' => 'node',
+  );
+  $ds_view_modes[$ds_view_mode->view_mode] = $ds_view_mode;
+
+  $ds_view_mode = new stdClass;
+  $ds_view_mode->disabled = FALSE; /* Edit this to true to make a default ds_view_mode disabled initially */
+  $ds_view_mode->api_version = 1;
+  $ds_view_mode->view_mode = 'portales7_entity_building';
+  $ds_view_mode->label = 'Building';
+  $ds_view_mode->entities = array(
+    'node' => 'node',
+  );
+  $ds_view_modes[$ds_view_mode->view_mode] = $ds_view_mode;
+  
+  $ds_view_mode = new stdClass;
+  $ds_view_mode->disabled = FALSE; /* Edit this to true to make a default ds_view_mode disabled initially */
+  $ds_view_mode->api_version = 1;
+  $ds_view_mode->view_mode = 'logo_title';
+  $ds_view_mode->label = 'Logo + title';
+  $ds_view_mode->entities = array(
+    'node' => 'node',
+  );
+  $ds_view_modes[$ds_view_mode->view_mode] = $ds_view_mode;
+  $ds_view_mode = new stdClass;
+  $ds_view_mode->disabled = FALSE; /* Edit this to true to make a default ds_view_mode disabled initially */
+  $ds_view_mode->api_version = 1;
+  $ds_view_mode->view_mode = 'bim';
+  $ds_view_mode->label = 'BIM';
+  $ds_view_mode->entities = array(
+    'node' => 'node',
+  );
+  $ds_view_modes[$ds_view_mode->view_mode] = $ds_view_mode;
+  return $ds_view_modes;
+}
+
+function portales7_form_demo_dump_form_alter(&$form, &$form_state) {
+  module_load_include('admin.inc', 'demo');
+  $fileconfig = demo_get_fileconfig();
+  $files = file_scan_directory($fileconfig['dumppath'], '/\.info$/');
+  if (count($files) >= variable_get('portales7_demo_max_snapshots', 2)) {
+    drupal_set_message(t('You have reached the maximum number of snapshots. Please, remove some before taking another'), 'error');
+    unset($form['actions']);
+    unset($form['dump']);
+  }
+  else {
+    $form['dump']['filename']['#default_value'] = format_date($_SERVER['REQUEST_TIME'], 'custom', 'dmY_Hi');
+  }
+}
+
+/**
+ * Implementation of hook_default_video_embed_styles().
+ */
+function portales7_default_video_embed_styles() {
+  $styles = array();
+  $files = glob(dirname(__FILE__) . '/video_styles/*.inc');
+  foreach($files as $file) {
+    $video_embed_style = NULL;
+    include($file);
+    $styles[$video_embed_style->name] = $video_embed_style;
+  }
+  return $styles;
+}
+
+/**
+ * Implementation of hook_views_api().
+ */
+function portales7_views_api() {
+  return array(
+    'api' => 3,
+    'path' => drupal_get_path('module', 'portales7'),
+  );
+}
+
+/**
+ * Implements hook_views_default_views_alter().
+ */
+function portales7_views_default_views_alter(&$views) {
+  $views['control_content']->disabled = TRUE;
+  $views['control_terms']->disabled = TRUE;
+}
+
+/**
+ * Implements hook_init().
+ */
+function portales7_init() {
+  if (path_is_admin(current_path())) {
+    drupal_add_css(drupal_get_path('theme', 'portales7_theme') . '/css/portales7_admin.css', array('type' => 'file', 'group' => CSS_THEME, 'weight' => 99));
+  }
+}
+
+/**
+ * Implements hook_user_login().
+ */
+function portales7_user_login(&$edit, $account) {
+  if (empty($_REQUEST['destination'])) $edit['redirect'] = 'admin/dashboard';
+}
+
+function portales7_dashboard_sets() {
+  return array('portales7' => t('Portales 7'));
+}
+
+/**
+ * Implements hook_metatag_config_default().
+ */
+function portales7_metatag_config_default(){
+    $configs = array();
+    $config = new stdClass();
+    $config->disabled = FALSE; /* Edit this to true to make a default config disabled initially */
+    $config->api_version = 1;
+    $config->instance = 'node:portales7_node';
+    $config->config = array(
+      'og:image' => array(
+        'value' => '[node:portales7_opengraph_image]',
+      ),
+    );
+    $configs[$config->instance] = $config;
+    return $configs;
+}
+
+/**
+ * Implements hook_form_user_admin_permissions_alter().
+ */
+function portales7_form_user_admin_permissions_alter(&$form, &$form_state) {
+  if (!user_access('administer portales7')) {
+    drupal_set_message(t('You are not allowed to access this page.'), 'error');
+    $form = array();
+  }
+}
+
+/*
+ * Implements hook_form_user_profile_form_alter().
+ */
+function portales7_form_user_profile_form_alter(&$form, &$form_state) {
+  if (!empty($form['#user']) && (in_array($form['#user']->name, array('admin', 'oppm-webmaster', 'oppm-redactor-avanzado', 'oppm-redactor'))) && !user_access('administer portales7')) {
+    drupal_set_message(t('You are not allowed to access this page.'), 'error');
+    $form = array();
+  }
+}
+
+/**
+ * Implementation of hook_language_switch_links_alter().
+ */
+function portales7_language_switch_links_alter(&$links, $type, $path) {
+  $params = drupal_get_query_parameters();
+  foreach ($links as &$link) {
+    $link['query'] = $params;
+  }
+}

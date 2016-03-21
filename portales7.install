@@ -1,0 +1,94 @@
+<?php
+function portales7_uninstall() {
+  variable_del('portales7_news');
+  variable_del('portales7_event');
+  variable_del('portales7_gallery');
+  variable_del('portales7_banner');
+}
+
+function portales7_install() {
+  drupal_set_message(t('Portales7 has been installed, please configure it at <a href="@link">settings page</a>',array('@link' => base_path() . 'admin/portales7')));
+  _portales7_setup_title_field();
+  
+  $menus = array(
+     'menu-panel-de-control' => array(
+       'title' => 'Control panel',
+       'description' => '',
+       'i18n_mode' => 5,
+     ),
+  );
+  foreach ($menus as $name => $menu) {
+    $menu['menu_name'] = $name;
+    menu_save($menu);
+  }
+  
+  _portales7_copy_resources();
+}
+
+function _portales7_setup_title_field() {
+  variable_set('title_node', array(
+  'auto_attach' => array(
+    'title' => 'title',
+  ),
+  'hide_label' => array(
+    'page' => 'page',
+    'entity' => 0,
+  ),
+));
+}
+
+function _portales7_copy_resources() {
+  $base = drupal_get_path('module', 'portales7') . '/resources';
+  $dest = defined('PORTALES7_RESOURCEDIR') ? PORTALES7_RESOURCEDIR : 'public://portales7-recursos';
+  dvtoolbox_copy_resources($base, $dest);
+}
+
+/**
+ * Enables module total_control
+ * Enables and configure module pagination
+ */
+function portales7_update_7400() {
+  $new_modules = array('total_control', 'pagination', 'imagecache_canvasactions', 'epsacrop', 'imagecache_canvasactions', 'node_reference', 'title');
+  if (!module_exists('dvtoolbox')) {module_enable(array('dvtoolbox'));}
+  dvtoolbox_module_enable($new_modules);
+  db_delete('menu_links')->condition('menu_name', 'shortcut-set-1')->condition('link_path', 'admin/portales7/cache')->execute();
+  _portales7_setup_title_field();
+  
+  //Add a shorcut
+  $link = array(
+    'menu_name' => 'menu-panel-de-control',
+    'link_title' => 'Dashboard',
+    'link_path' => 'admin/dashboard',
+    'weight' => 49,
+  );
+  menu_link_save($link);
+  
+}
+
+function portales7_requirements($phase) {
+  if ($phase == 'install') return array();
+  $output = array();
+  if (!module_exists('portales7_profile')) {
+    $t = get_t();
+    $output['portales7_profile'] = array(
+      'title' => $t('Portales 7'),
+      'description' => $t('Portales 7 installation profile was not found'),
+      'severity' => REQUIREMENT_ERROR,
+      'value' => '7.4.0'
+    );
+    if ($phase == 'update') {
+      include(dirname(__FILE__) . '/portales7.profile_fix.inc');
+      variable_set('install_profile', 'portales7_profile');
+      module_enable($profile['info']['dependencies']);
+      $profile['info'] = serialize($profile['info']);
+      try {
+        db_insert('system')->fields($profile)->execute();
+      }
+      catch(Exception $e) {}
+      drupal_set_message($t('Auto enabling Portales7 profile'), 'warning'); 
+      variable_set('portales7_profile_missing', TRUE);
+      return array();
+    }
+  }
+  return $output;
+}

@@ -1,0 +1,7 @@
+name = DV Facebook
+description = Provides integration between FB and Digital Value developments
+version = 7.x-5.0-dev
+package = by Digital Value, SL
+core = 7.x
+dependencies[] = libraries
+configure = admin/config/jsapp/dvfb

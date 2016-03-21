@@ -1,0 +1,34 @@
+<?php
+function portales7_og_install() {
+  variable_set('og_context_negotiation_group_context', array('spaces_og' => array(), 'url' => array(), 'node' => array()));
+  variable_set('og_context_providers_weight_group_context', array(
+    'url' => '-9',
+    'node' => '-8',
+    'spaces_og' => '-10',
+    'user-view' => '-7',
+    'user-edit' => '-6',
+  ));
+  variable_set('og_group_content_type_portales7_node', 'omitted');
+  variable_set('og_group_type_portales7_group', 'omitted');
+  variable_set('og_views_global_view', 'og_list page_1');
+  variable_set('purl_method_spaces_og', 'path');
+  variable_set('purl_types', array('path' => 'path'));
+  variable_set('spaces_preset_og', 'og_controlled');
+}
+
+function portales7_og_uninstall() {
+}
+
+
+
+/**
+ * Adds a field for a group image header
+ */
+function portales7_og_update_7001(){
+  module_load_include('inc', 'portales7_og', 'portales7_og.miniportal');
+  $fields = _portales7_og_installed_fields();
+  field_create_field($fields['portales7_og_header']);
+  $instances = _portales7_og_installed_instances();
+  field_create_instance($instances['portales7_og_header']);
+  
+}

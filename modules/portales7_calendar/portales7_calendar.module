@@ -1,0 +1,26 @@
+<?php
+/**
+ * @file
+ * .module file for portales7_calendar module
+ * Provides calendar feature to portales7 sites
+ * @author Juanjo Garcia <juanjo@digitalvalue.es>
+ * @author Digital Value, SL <info@digitalvalue.es>
+ */
+/**
+ * Implementation of hook_views_api().
+ */
+function portales7_calendar_views_api() {
+  return array(
+    'api' => 3,
+  );
+}
+
+/**
+ * Implements hook_preprocess_calendar_datebox().
+ */
+function portales7_calendar_preprocess_calendar_datebox(&$vars) {
+  $term = arg(1);
+  //if (empty($term) || !is_numeric($term)) $term = 'all';
+  $term = 'all';
+  $vars['link'] = !empty($vars['items'][$vars['date']]) ? l($vars['day'], 'listado-evento' . '/' . $term . '/' . $vars['date']) : $vars['day'];
+}

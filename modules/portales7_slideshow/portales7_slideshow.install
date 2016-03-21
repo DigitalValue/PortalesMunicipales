@@ -1,0 +1,15 @@
+<?php
+
+/**
+ * @file
+ * Install, update and uninstall functions for the pdfpreview module.
+ */
+
+/**
+ * Implements hook_uninstall().
+ */
+function portales7_slideshow_uninstall() {
+  variable_del('portales7_slideshow_imagecache_filter');
+  variable_del('portales7_slideshow_imagecache_showcontrols');
+  variable_del('portales7_slideshow_imagecache_inlinetitle');
+}

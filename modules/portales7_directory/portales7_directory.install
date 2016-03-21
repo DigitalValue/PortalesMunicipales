@@ -1,0 +1,129 @@
+<?php
+function portales7_directory_update_7500() {
+  module_load_include('field.inc', 'dvtoolbox');
+  module_load_include('node.inc', 'portales7_directory');
+  $m = dvtoolbox_field_create_instances('node', array('portales7_entity' => _portales7_directory_installed_instances()));
+  if (db_table_exists('field_data_portales7_entity_main_image')) {
+    db_query("INSERT INTO {field_data_portales7_main_image} (SELECT * FROM {field_data_portales7_entity_main_image})");
+    db_query("INSERT INTO {field_revision_portales7_main_image} (SELECT * FROM {field_revision_portales7_entity_main_image})");
+    db_query("TRUNCATE TABLE {field_data_portales7_entity_main_image}");
+    db_query("TRUNCATE TABLE {field_revision_portales7_entity_main_image}");
+    $instance = field_info_instance('node', 'portales7_entity_main_image','portales7_entity');
+    field_delete_instance($instance);
+  }
+  if (db_table_exists('field_data_portales7_entity_images')) {
+    db_query("INSERT INTO {field_data_portales7_images} (SELECT * FROM {field_data_portales7_entity_images})");
+    db_query("INSERT INTO {field_revision_portales7_images} (SELECT * FROM {field_revision_portales7_entity_images})");
+    db_query("TRUNCATE TABLE {field_data_portales7_entity_images}");
+    db_query("TRUNCATE TABLE {field_revision_portales7_entity_images}");
+    $instance = field_info_instance('node', 'portales7_entity_images','portales7_entity');
+    field_delete_instance($instance);
+  }
+  $m += dvtoolbox_field_create_groups('node', _portales7_directory_installed_field_groups());
+}
+
+function portales7_directory_update_7501() {
+  module_load_include('field.inc', 'dvtoolbox');
+  module_load_include('node.inc', 'portales7_directory');
+  $m = dvtoolbox_field_create_instances('node', array('portales7_entity' => _portales7_directory_installed_instances()));
+}
+
+/**
+ * Creación del campo portales7_entity_booking
+ */
+function portales7_directory_update_7502() {
+  module_load_include('field.inc', 'dvtoolbox');
+  module_load_include('node.inc', 'portales7_directory');
+  
+  $m = array();
+  $m +=dvtoolbox_field_create_fields(_portales7_directory_installed_fields());
+  $m += dvtoolbox_field_create_instances('node', array('portales7_entity' => _portales7_directory_installed_instances()));
+  $m += dvtoolbox_field_create_groups('node', _portales7_directory_installed_field_groups());
+  drupal_set_message('<pre>' . join("\n", $m) . '</pre>', 'status');
+  
+  $settings = field_bundle_settings('node', 'portales7_entity');
+  $view_modes = field_view_mode_settings('node', 'portales7_entity');
+  foreach($view_modes as $view_mode => $info) {
+    $settings['extra_fields']['display']['language'][$view_mode]['visible'] = FALSE;
+  }
+  $settings['extra_fields']['display']['language']['default'] ['visible'] = FALSE;
+  field_bundle_settings('node', 'portales7_entity', $settings);
+  field_info_cache_clear();
+}
+
+
+/**
+ * Actualización de las presentaciones
+ */
+function portales7_directory_update_7503() {
+  module_load_include('field.inc', 'dvtoolbox');
+  module_load_include('node.inc', 'portales7_directory');
+  
+  $m = array();
+  $m += dvtoolbox_field_create_instances('node', array('portales7_entity' => _portales7_directory_installed_instances()));
+  drupal_set_message('<pre>' . join("\n", $m) . '</pre>', 'status');
+  
+  $settings = field_bundle_settings('node', 'portales7_entity');
+  $view_modes = portales7_directory_default_view_modes();
+  foreach($view_modes as $view_mode => $info) {
+    $settings['extra_fields']['display']['language'][$view_mode]['visible'] = FALSE;
+    $settings['view_modes'][$view_mode]['custom_settings'] = TRUE;
+  }
+  $settings['extra_fields']['display']['language']['default'] ['visible'] = FALSE;
+  field_bundle_settings('node', 'portales7_entity', $settings);
+  field_info_cache_clear();
+}
+
+
+/**
+ * Actualización de grupos de campos
+ */
+function portales7_directory_update_7504() {
+  module_load_include('field.inc', 'dvtoolbox');
+  module_load_include('node.inc', 'portales7_directory');
+  
+  $m = array();
+  $m += dvtoolbox_field_create_groups('node', _portales7_directory_installed_field_groups());
+  drupal_set_message('<pre>' . join("\n", $m) . '</pre>', 'status');
+  
+  $settings = field_bundle_settings('node', 'portales7_entity');
+  $view_modes = portales7_directory_default_view_modes();
+  foreach($view_modes as $view_mode => $info) {
+    $settings['extra_fields']['display']['language'][$view_mode]['visible'] = FALSE;
+    $settings['view_modes'][$view_mode]['custom_settings'] = TRUE;
+  }
+  $settings['extra_fields']['display']['language']['default'] ['visible'] = FALSE;
+  field_bundle_settings('node', 'portales7_entity', $settings);
+  field_info_cache_clear();
+}
+
+/**
+ * Creación de los campos para pasar de 7.5.0 a 7.5.2
+ */
+function portales7_directory_update_7505() {
+  module_load_include('inc', 'portales7_profile', 'includes/portales7_directory');
+  portales7_profile_setup_portales7_directory();
+}
+
+function portales7_directory_update_7520() {
+  require(dirname(__FILE__) . '/portales7_entity.instances.inc');
+  $existing = field_read_instances(array('bundle' => 'portales7_node'));
+  foreach ($existing as $instance) {
+    if (!empty($instances[$instance['field_name']])) {
+      $instance['weight'] = $instances[$instance['field_name']]['weight'];
+      $instance['label'] = $instances[$instance['field_name']]['label'];
+      $instance['description'] = $instances[$instance['field_name']]['description'];
+      $instance['settings'] = $instances[$instance['field_name']]['settings'];
+      $instance['widget'] = $instances[$instance['field_name']]['widget'];
+      foreach ($instances[$instance['field_name']]['display'] as $k => $v) {
+        $instance['display'][$k] = $v;
+      }
+      field_update_instance($instance);
+      unset($instances[$instance['field_name']]);
+    }
+  }
+  module_load_include('field.inc', 'dvtoolbox');
+  module_load_include('node.inc', 'portales7_node');
+  dvtoolbox_field_create_groups('node', _portales7_directory_installed_field_groups());
+}
+

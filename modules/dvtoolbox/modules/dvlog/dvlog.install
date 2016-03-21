@@ -1,0 +1,24 @@
+<?php
+function dvlog_install(){
+  $file = conf_path() . 'dvlog.cfg';
+  if (file_exists($file) && ($cfg = drupal_parse_info_file($file))) {
+    variable_set('dvlog_site', $cfg['name']);
+    unset($cfg_name);
+    variable_set('dvlog_database', $cfg);
+  }
+  else {
+    variable_set('dvlog_site', conf_path());
+    variable_set('dvlog_database', array(
+      'database' => 'log_portales',
+      'username' => '',
+      'password' => '',
+      'host' => 'localhost',
+      'driver' => 'mysql'
+    ));
+  }
+}
+
+function dvlog_uninstall() {
+  variable_del('dvlog_site');
+  variable_del('dvlog_database');
+}

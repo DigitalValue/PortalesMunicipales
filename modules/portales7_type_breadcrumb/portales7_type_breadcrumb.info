@@ -1,0 +1,5 @@
+name = Portales 7 Type breadcrumb 
+description = Provides a breadcrumb based on type hierarchy for Portales 7
+core = 7.x
+package = Portales 7 by Digital Value, SL.
+dependencies[] = portales7_node

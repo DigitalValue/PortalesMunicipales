@@ -1,0 +1,5 @@
+name = Toolbox
+description = Provides a place for custom library functions
+version = 7.x-5.0-dev
+package = by Digital Value, SL
+core = 7.x

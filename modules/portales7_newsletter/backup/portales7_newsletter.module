@@ -1,0 +1,345 @@
+<link type="text/css" href="/boletines/sites/all/modules/portales7_newsletter/outside.css" rel="stylesheet" media="all" />
+<?php
+function portales7_newsletter_menu() {
+  $items = array();
+  $items['admin/portales7/newsletter/add'] = array(
+    'title' => 'Create newsletter',
+    'type' => MENU_LOCAL_TASK,
+    'page callback' => 'portales7_newsletter_generator',
+    'access arguments' => array('create portales7 newsletter'),
+    'file' => 'portales7_newsletter.pages.inc',
+    'delivery callback' => 'portales7_newsletter_generator_deliver',
+  );
+  $items['admin/portales7/newsletter'] = array(
+    'title' => 'Newsletters',
+    'description' => 'List existing newsletters',
+    'access arguments' => array('manage portales7 newsletters'),
+    'file' => 'portales7_newsletter.admin.inc',
+    'page callback' => 'portales7_newsletter_list',
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['portales7/newsletter/login'] = array(
+     'title' => 'Login on the intranet',
+     'type' => MENU_LOCAL_TASK,
+     'file' => 'portales7_newsletter.admin.inc',
+     'page callback' => 'portales7_newsletter_login',
+     'access callback' => TRUE,
+  );
+  /*$items['admin/portales7/newsletter/list'] = array(
+    'title' => 'Newsletters',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+  );*/
+  $items['portales7/newsletter/save'] = array(
+    'title' => 'Save Newsletter',
+    'type' => MENU_CALLBACK,
+    'file' => 'portales7_newsletter.admin.inc',
+    'page callback' => 'portales7_newsletter_save',
+    'page arguments' => array(3),
+    'access arguments' => array('create portales7 newsletter'),
+  );
+  $items['portales7/newsletter/%newsletter'] = array(
+    'title' => 'Newsletter',
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'portales7_newsletter.pages.inc',
+    'page callback' => 'portales7_newsletter_view',
+    'page arguments' => array(2),
+    'access arguments' => array('access content'),
+    'delivery callback' => 'portales7_newsletter_view_deliver',
+  );
+  $items['portales7/newsletter/%newsletter/clone'] = array(
+    'title' => 'Newsletter',
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'portales7_newsletter.pages.inc',
+    'page callback' => 'portales7_newsletter_generator',
+    'page arguments' => array(2),
+    'access arguments' => array('access content'),
+    //'delivery callback' => 'portales7_newsletter_generator_deliver',
+  );
+  $items['portales7/newsletter/custom/save'] = array(
+    'title' => 'Save customized element',
+    'type' => MENU_CALLBACK,
+    'file' => 'portales7_newsletter.admin.inc',
+    'page callback' => 'portales7_newsletter_custom_save',
+    //'access arguments' => array('create portales7 newsletter'),
+    'access arguments' => array('access content'),
+  );
+  $items['portales7/newsletter/custom/get'] = array(
+    'title' => 'Get customized elements',
+    'type' => MENU_CALLBACK,
+    'file' => 'portales7_newsletter.admin.inc',
+    'page callback' => 'portales7_newsletter_custom_get',
+    //'access arguments' => array('create portales7 newsletter'),
+    'access arguments' => array('access content'),
+  );
+  
+  $items['portales7/newsletter/custom/delete'] = array(
+    'title' => 'Delete customized elements',
+    'type' => MENU_CALLBACK,
+    'file' => 'portales7_newsletter.admin.inc',
+    'page callback' => 'portales7_newsletter_custom_delete',
+    'page arguments' => array(4),
+    //'access arguments' => array('create portales7 newsletter'),
+    'access arguments' => array('access content'),
+  );
+  
+    $items['portales7/newsletter/delete'] = array(
+    'title' => 'Delete newsletter',
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'portales7_newsletter.admin.inc',
+    'page callback' => 'portales7_newsletter_delete',
+    'page arguments' => array(3),
+    //'access arguments' => array('create portales7 newsletter'),
+    'access arguments' => array('access content'),
+  );
+    $items['admin/portales7/newsletter/agenda'] = array(
+    'title' => 'Agenda',
+    'type' => MENU_CALLBACK,  	
+    //'page callback' => 'drupal_get_form',
+    //'page arguments' => array('form_mantenimiento'),
+    'page callback' => 'portales7_newsletter_agenda_print',
+    'access arguments' => array('access content'),
+    );
+  
+  return $items;
+}
+
+function newsletter_load($id) {
+  return db_select('portales7_newsletters', 'p7n')->fields('p7n', array())->condition('id', $id)->execute()->fetch();
+}
+
+function portales7_newsletter_permission() {
+  return array(
+    'manage portales7 newsletters' => array('title' => t('Manage Portales7 Newsletters')),
+    'create portales7 newsletter' => array('title' => t('Create Portales7 Newsletters')),
+  );
+}
+
+function portales7_newsletter_generator_deliver($page_callback_result) {
+  if (isset($page_callback_result) && is_null(drupal_get_http_header('Content-Type'))) {
+    drupal_add_http_header('Content-Type', 'text/html; charset=utf-8');
+  }
+  print $page_callback_result;
+}
+
+function portales7_newsletter_json_deliver($page_callback_result) {
+  if (isset($page_callback_result) && is_null(drupal_get_http_header('Content-Type'))) {
+    drupal_add_http_header('Content-Type', 'text/json; charset=utf-8');
+  }
+  else {
+    drupal_not_found();
+  }
+  print $page_callback_result;
+}
+
+function portales7_newsletter_view_deliver($page_callback_result) {
+  if (isset($page_callback_result) && is_null(drupal_get_http_header('Content-Type'))) {
+    drupal_add_http_header('Content-Type', 'text/html; charset=utf-8');
+  }
+  print $page_callback_result;
+}
+
+function form_portales7_newsletter_create_content(){
+	$form['centro'] = array(
+		'#title' => t('Centro'),
+ 		'#type' => 'fieldset',
+		'#suffix' => '<hr><br>',
+ 		);
+		$form['centro']['nombre'] = array(
+ 		'#title' => t('Nombre'),
+ 		'#type' => 'textfield',
+		'#size' => 15,
+ 		);
+		$form['centro']['url'] = array(
+ 		'#title' => t('URL'),
+ 		'#type' => 'textfield',
+		'#size' => 15,
+ 		);
+	$form['titulos'] = array(
+		'#title' => t('Títulos'),
+ 		'#type' => 'fieldset',
+		'#suffix' => '<hr><br>',
+ 		);
+		$form['titulos']['antetitulo'] = array(
+ 		'#title' => t('Antetitulo'),
+ 		'#type' => 'textfield',
+		'#size' => 15,
+ 		);
+		$form['titulos']['titulo'] = array(
+ 		'#title' => t('Título'),
+ 		'#type' => 'textfield',
+		'#size' => 15,
+ 		);
+		$form['titulos']['subtitulo'] = array(
+ 		'#title' => t('Subtitulo'),
+ 		'#type' => 'textfield',
+		'#size' => 15,
+ 		);
+	$form['fechas'] = array(
+		'#title' => t('Fechas'),
+ 		'#type' => 'fieldset',
+		'#suffix' => '<hr><br>',
+ 		);
+		$form['fechas']['inicio'] = array(
+ 		'#title' => t('Inicio'),
+ 		'#type' => 'textfield',
+		'#size' => 15,
+ 		);
+		$form['fechas']['fin'] = array(
+ 		'#title' => t('Fin'),
+ 		'#type' => 'textfield',
+		'#size' => 15,
+ 		);
+		$form['fechas']['recurrencia'] = array(
+ 		'#title' => t('Recurrencia'),
+ 		'#type' => 'textfield',
+		'#size' => 15,
+ 		);
+	$form['materia'] = array(
+		'#title' => t('Materia'),
+ 		'#type' => 'fieldset',
+		'#suffix' => '<hr><br>',
+ 		);
+		$form['materia']['sipnosis'] = array(
+ 		'#title' => t('Sipnosis'),
+ 		'#type' => 'textfield',
+		'#size' => 70,
+ 		);
+		$form['materia']['descripcion'] = array(
+ 		'#title' => t('Descripción'),
+ 		'#type' => 'textarea',
+		'#size' => 500,
+ 		);
+	$form['imagenes'] = array(
+		'#title' => t('Imagenes'),
+ 		'#type' => 'fieldset',
+		'#suffix' => '<hr><br>',
+ 		);
+		$form['imagenes']['portada'] = array(
+ 		'#title' => t('Portada'),
+ 		'#type' => 'managed_file',
+		//'#upload_location' => 'public://YOUR_PATH/',
+    		'#theme' => 'fapi_image_preview'
+ 		);
+		$form['imagenes']['ficha'] = array(
+ 		'#title' => t('Ficha'),
+ 		'#type' => 'textfield',
+		'#size' => 15,
+ 		);
+		$form['imagenes']['listado'] = array(
+ 		'#title' => t('Listado'),
+ 		'#type' => 'textfield',
+		'#size' => 15,
+ 		);
+	$form['localizacion'] = array(
+		'#title' => t('Localización'),
+ 		'#type' => 'fieldset',
+		'#suffix' => '<br>',
+ 		);
+		$form['localizacion']['sala'] = array(
+ 		'#title' => t('Sala'),
+ 		'#type' => 'textfield',
+		'#size' => 15,
+ 		);
+		$form['localizacion']['direccion'] = array(
+ 		'#title' => t('Direccion'),
+ 		'#type' => 'textfield',
+		'#size' => 15,
+ 		);
+		$form['localizacion']['mapa'] = array(
+ 		'#title' => t('Mapa'),
+ 		'#type' => 'textfield',
+		'#size' => 15,
+ 		);
+		 $form['submit'] = array(
+ 		'#type' => 'submit',
+ 		'#value' => t('Crear Contenido'),
+ 		);
+ 		return $form;
+}
+
+function form_portales7_newsletter_create_content_submit(&$form, &$form_state){
+		//inicializamos nodo
+		$node = new stdClass();
+		$node->type = 'portales7_node';
+		$node->language = LANGUAGE_NONE;
+		$node->title = $form_state['values']['titulo'];
+		node_object_prepare($node);
+		$node->portales7_type['und'][0]['tid'] = 5;
+		//add body
+		$node->body['und'][0]['value'] = $form_state['values']['descripcion'];
+		$node->body['und'][0]['safe_value'] = $form_state['values']['descripcion'];
+		$node->portales7_teaser['und'][0]['value'] = $form_state['values']['sipnosis'];
+		$node->portales7_teaser['und'][0]['safe_value'] = $form_state['values']['sipnosis'];
+		$node->body['und'][0]['format'] = 'filtered_html';
+		//$node->path = array('alias' => 'contenido-agenda-de-prueba');
+		//$node->uid = 1;
+		//campos personalizados
+
+		$node->field_nom['und'][0]['value'] = $form_state['values']['nombre'];
+		$node->field_nom['und'][0]['format'] = 'filtered_html';
+
+		$node->path['und'][0]['value'] = $form_state['values']['url'];
+		$node->path['und'][0]['format'] = 'filtered_html';
+
+		$node->field_antetitulo['und'][0]['value'] = $form_state['values']['antetitulo'];
+		$node->field_antetitulo['und'][0]['format'] = 'filtered_html';
+
+		$node->field_subtitulo['und'][0]['value'] = $form_state['values']['subtitulo'];
+		$node->field_subtitulo['und'][0]['format'] = 'filtered_html';
+
+		
+		$node->field_inicio['und'][0]['value'] = $form_state['values']['inicio'];//date
+		$node->field_inicio['und'][0]['format'] = 'filtered_html';
+	
+		$node->field_fin['und'][0]['value'] = $form_state['values']['fin'];//date
+		$node->field_fin['und'][0]['format'] = 'filtered_html';
+
+		$node->field_recurrent['und'][0]['value'] = $form_state['values']['recurrencia'];//date
+		$node->field_recurrent['und'][0]['format'] = 'filtered_html';
+		
+		$node->field_portada['und'][0]['value'] = $form_state['values']['portada'];//imagen
+		$node->field_portada['und'][0]['format'] = 'filtered_html';
+
+		$node->field_ficha['und'][0]['value'] = $form_state['values']['ficha'];//imagen
+		$node->field_ficha['und'][0]['format'] = 'filtered_html';
+
+		$node->field_listado['und'][0]['value'] = $form_state['values']['listado'];//imagen
+		$node->field_listado['und'][0]['format'] = 'filtered_html';
+
+		$node->field_sala['und'][0]['value'] = $form_state['values']['sala'];
+		$node->field_sala['und'][0]['format'] = 'filtered_html';
+
+		$node->field_direccion['und'][0]['value'] = $form_state['values']['direccion'];
+		$node->field_direccion['und'][0]['format'] = 'filtered_html';
+
+		$node->field_map['und'][0]['value'] = $form_state['values']['mapa'];//map
+		$node->field_map['und'][0]['format'] = 'filtered_html';
+
+		//guardar nodo
+		dpm($node);
+		$node = node_submit($node);
+		///comprobar estructura de nodo ya creado
+		$prenode = node_load(null,8);//cargar un nodo ya creado
+		dpm($prenode);
+		node_save($node);
+		
+}
+
+function portales7_newsletter_agenda_print(){
+	$form = drupal_get_form('form_portales7_newsletter_create_content');
+	print drupal_render($form);
+}
+
+function portales7_newsletter_theme($existent = array()) {
+  $path = drupal_get_path('module','portales7_newsletter') . '/templates';
+  return array(
+    'newsletter' => array(
+      'template' => 'newsletter',
+      'path' => $path,
+    ),
+    'newsletter-generator' => array(
+      'template' => 'generator',
+      'path' => $path,
+    ),
+  );
+}

@@ -1,0 +1,87 @@
+<?php
+define('PDF2IMAGES_DEFAULT_QUALITY', '95');
+
+function pdf2images_menu() {
+  $items['pdf2images'] = array(
+    'type' => MENU_CALLBACK,
+    'title' => 'pdf2images',
+    'access arguments' => array('access content'),
+    'page callback' => 'pdf2images_file',
+  );
+  $items['admin/portales7/pdf2images'] = array(
+    'type' => MENU_LOCAL_TASK,
+    'title' => 'pdf2images',
+    'access arguments' => array('administer portales7'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('pdf2images_admin'),
+    'file' => 'pdf2images.admin.inc',
+  );
+  return $items;
+}
+
+function pdf2images_file() {
+  $relpath = join('/', func_get_args());
+  drupal_json_output(_pdf2images_queue_run($relpath));
+}
+
+function pdf2images_entity_update($entity, $type) {
+  return pdf2images_entity_insert($entity, $type);
+}
+
+function pdf2images_entity_insert($entity, $type) {
+  if (($type != 'file') || ($entity->filemime != 'application/pdf')) return;
+  $relpath = variable_get('file_public_path', conf_path() . '/files') . '/' . file_uri_target($entity->uri);
+  $queue = DrupalQueue::get('pdf2images');
+  $queue->createQueue();
+  $queue->createItem($relpath);
+}
+
+/**
+ * Implements hook_cron_queue_info().
+ */
+function pdf2images_cron_queue_info() {
+  $queues['pdf2images'] = array(
+    'worker callback' => '_pdf2images_queue_run',
+    'time' => 300,
+  );
+  return $queues;
+}
+
+/**
+ * Perform selected operation on a queued item
+ */
+function _pdf2images_queue_run($relpath) {
+  $destdir = 'public://pdf2images/' . md5($relpath);
+  $path = DRUPAL_ROOT . '/' . $relpath;
+  $dest = drupal_realpath($destdir);
+  if (!file_exists($dest . '/page-00000.jpg')) {
+    $args = array();
+    $args['quality'] = '-quality ' . escapeshellarg(variable_get('imagemagick_quality', PDF2IMAGES_DEFAULT_QUALITY));
+    
+    file_prepare_directory($destdir, FILE_MODIFY_PERMISSIONS|FILE_CREATE_DIRECTORY);
+    $context = array(
+      'source' => $path,
+      'destination' => $dest . '/page-%05d.jpg',
+    );
+
+    drupal_alter('imagemagick_arguments', $args, $context);
+    $command = escapeshellarg($context['source']) . ' ' . implode(' ', $args) . ' ' . escapeshellarg($context['destination']);
+
+    if (_imagemagick_convert_exec($command, $cmdoutput, $error) !== TRUE) {
+      $files = glob($dest . '/*.jpg');
+      watchdog('pdf2images', 'Error @output converting image @path', array('@output' => $cmdoutput, '@path' => $relpath), WATCHDOG_ERROR);
+      return array("msg" => 'Error convirtiendo', 'output' => $cmdoutput, 'error' => $error, 'cmd' => $command, 'files' => $files);
+    }
+    watchdog('pdf2images', 'Convert file @file', array('@file' => $relpath), WATCHDOG_INFO);
+  }
+  $files = glob($dest . '/*.jpg');
+  foreach ($files as $file) {
+    $file = str_replace(drupal_realpath('public://pdf2images'), 'public://pdf2images', $file);
+    $output['urls'][] = file_create_url($file);
+  }
+  $output['files'] = str_replace(DRUPAL_ROOT, '', $files);
+  $output['total'] = count($files);
+  
+  return $output;
+}
+

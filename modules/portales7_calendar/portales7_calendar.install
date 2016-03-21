@@ -1,0 +1,9 @@
+<?php
+function portales7_calendar_install() {
+  variable_set('date_views_monthformat_without_year', 'F');
+}
+
+function portales7_calendar_update_7500() {
+  variable_set('date_views_monthformat_without_year', 'F');
+}
+

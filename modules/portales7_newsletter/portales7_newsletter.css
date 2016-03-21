@@ -1,0 +1,44 @@
+body {font-size: 12px; font-family: Arial, Helvetica, sans-serif;overflow:hidden;}
+ul { list-style-type: none; margin: 0; padding: 0;margin-bottom: 10px;display:block;}
+li { margin: 5px; padding: 5px; width: 95%;display:block; }
+.noticia-listado { width: 220px;height:92px; float: left;overflow:hidden;}
+.node-title {font-size: 130%; font-weight: bold;}
+/*.noticia-listado .node-content {display: none;}*/
+.newsletter-listado .node-content {display: block;}
+.tabs > li {width:inherit;}
+#continguts >.noticia-listado {font-size: 75%;}
+#continguts li {height: 80px; overflow: hidden;}
+#continguts .node-thumbnail img {max-height: 50px; float: left;}
+#form-fuentes, #form-filters{float:left; display: inline;}
+#fuentes select { width: 200px;}
+#filter-search {float: right;}
+.tab { height: 230px; overflow-y: scroll;}
+#fuentes {width: 100%;}
+.filter {margin-left: 2em; margin-right: 2em;}
+#tabs > div {width: 96%;height:95.6%;} 
+#tabs {overflow: hidden; width:100%;}
+#texto_personalizado {width: 100%; padding: 0; height: 210px};
+#form-custom {width: 100%; padding: 0; margin: 0; border: 1px solid red;}
+input[type=text] {width: 200px; padding-left: 0.3em;}
+label {margin: 0 0.5em 0 2em;}
+.content-pane { float: left; border-collapse:collapse; min-height: 800px;}
+.content-pane-vertical { float: top; border-collapse:collapse; min-height: 270px;}
+#newsletter {width: 1000px;margin: auto;margin-left:0;margin-right:0;}
+
+#newsletter-generator {display:table-row;}
+#tabs {display: table-cell;vertical-align: top;}
+#newsletter-container { display:block; border: 1px solid black;overflow-x:hidden;overflow-y:auto;height:810px;}
+#newsletter {min-height: 810px; height: 100%;}
+.tab {height: 100%;}
+.minis{width:60px;margin:0px;margin-top:0px;}
+/*
+#sortable1{margin:auto;padding:0;min-height:810px;height:810px;}
+#sortable2{margin:auto;padding:0;min-height:810px;height:810px;}
+#sortable3{margin:auto;padding:0;min-height:810px;height:810px;}
+*/
+.horizontal{margin:auto;padding:0;min-height:810px;height:810px;}
+.vertical{margin:auto;padding:0;min-height:270px;;height:270px;width:1000px;min-width:1000px;}
+.vertical-down{margin:auto;padding:0;min-height:270px;;height:270px;width:1000px;min-width:1000px;margin-bottom:0px;clear:both;}
+.vertical-full{margin:auto;padding:0;min-height:810px;height:810px;}
+.centro-cc{margin:auto;padding:0;min-height:270px;;height:270px;}
+#tab-sources{overflow-x:hidden;}

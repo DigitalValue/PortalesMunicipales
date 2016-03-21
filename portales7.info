@@ -1,0 +1,19 @@
+name = Portales 7
+description = Base module for Portales 7
+core = 7.x
+version = 5.2-151229
+package = Portales 7 by Digital Value, SL.
+dependencies[] = dvtoolbox
+dependencies[] = ctools
+dependencies[] = panels
+dependencies[] = panels_everywhere
+dependencies[] = variable
+dependencies[] = total_control
+;dependencies[] = pagination
+dependencies[] = imagecache_canvasactions
+dependencies[] = epsacrop
+dependencies[] = menu
+dependencies[] = i18n
+dependencies[] = i18n_string
+
+stylesheets[all][] = css/portales7.css

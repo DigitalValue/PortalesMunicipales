@@ -1,0 +1,568 @@
+<?php
+/**
+ * Search a given taxonomy term on a vocabulary
+ * and optionally creates it if don't exists
+ */
+function dvtoolbox_get_taxonomy_term_by_name($name, $vocabulary, $create = FALSE, $ptid = 0) {
+  if (empty($name)) return FALSE;
+  $v = taxonomy_vocabulary_machine_name_load($vocabulary);
+  if (function_exists('synonyms_get_term_by_synonym') && ($tid = synonyms_get_term_by_synonym($name, $v, $ptid))) {
+     return taxonomy_term_load($tid);
+  }
+  if (!$v->vid) return FALSE;
+  $query = new EntityFieldQuery;
+  $result = $query
+  ->entityCondition('entity_type', 'taxonomy_term')
+  ->propertyCondition('name', $name)
+  ->propertyCondition('vid', $v->vid)
+  ->execute();
+
+  if ($result) {
+    $term = array_shift($result['taxonomy_term']);
+    $term = taxonomy_term_load($term->tid);
+  }
+  elseif ($create) {
+    $term = new stdClass();
+    $term->name = $name;
+    $term->vid = $v->vid;
+    $term->parent = $ptid;
+    $term->description = '';
+    taxonomy_term_save($term);
+  } 
+  else 
+    return FALSE;
+  return $term;
+}
+
+/**
+ * Implements hook_menu()
+ */
+function dvtoolbox_menu() {
+  $items['admin/dvtoolbox/cache'] = array(
+    'title' => 'Cache clean',
+    'page callback' => 'dvtoolbox_cache_clean',
+    'access arguments' => array('view the administration theme'),
+    'type' => MENU_CALLBACK,
+  );
+  $items['dvtoolbox/data/get'] = array(
+    'title' => 'Data retrieve',
+    'page callback' => 'dvtoolbox_data_get',
+    'type' => MENU_CALLBACK,
+    'access arguments' => array('dvtoolbox use data storage'),
+    'file' => 'dvtoolbox.datastorage.inc',
+  );
+  $items['dvtoolbox/data/save'] = array(
+    'title' => 'Data save',
+    'page callback' => 'dvtoolbox_data_save',
+    'type' => MENU_CALLBACK,
+    'access arguments' => array('dvtoolbox use data storage'),
+    'file' => 'dvtoolbox.datastorage.inc',
+  );
+  $items['dvtoolbox/data/delete'] = array(
+    'title' => 'Data delete',
+    'page callback' => 'dvtoolbox_data_delete',
+    'type' => MENU_CALLBACK,
+    'access arguments' => array('dvtoolbox use data storage'),
+    'file' => 'dvtoolbox.datastorage.inc',
+  );
+  $items['dvtoolbox/hooks'] = array(
+    'title' => 'Hook implementation cache rebuild',
+    'page callback' => 'dvtoolbox_hook_rebuild',
+    'type' => MENU_CALLBACK,
+    'access arguments' => array('administer site configuration'),
+  );
+  $items['admin/config/development/dvtooblox-hooks'] = array(
+    'title' => 'Hook cache rebuild',
+    'description' => 'Provides an easy and fast way to rebuild hook implementation cache',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('dvtoolbox_hook_form'),
+    'access arguments' => array('administer site configuration'),
+  );
+  $items['dvtoolbox/run'] = array(
+    'type' => MENU_CALLBACK,
+    'access callback' => TRUE,
+    'page callback' => 'dvtoolbox_run_custom_code',
+  );
+  return $items;
+}
+
+function dvtoolbox_run_custom_code(){
+  $output = array();
+  foreach (glob(dirname(__FILE__).'/fakeupdates/*.fakeupdate.inc') as $file) {
+    require_once($file);
+    $function = '_dvtoolbox_fakeupdate_' . basename($file, '.fakeupdate.inc');
+    $output[] = $function();
+  }
+  return "<pre>" . join("\n", $output) . '</pre>';
+  drupal_goto();
+}
+
+function dvtoolbox_hook_form($form, &$form_state) {
+  $form['hook'] = array(
+    '#type' => 'textfield',
+    '#title' => 'Hook',
+    '#default_value' => '',
+    '#description' => t('Hook name for which implementation cache will be rebuilt.'),
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Rebuild'),
+  );
+  
+  if (!empty($form_state['temporary']['hook'])) {
+    $hook = $form_state['temporary']['hook'];
+    $imp = module_implements($hook, TRUE);
+    $ctd = count($imp);
+    $form['output' . $_SERVER['REQUEST_TIME']] = array(
+      '#type' => 'markup',
+      '#markup' => theme('item_list', array('title' => format_plural($ctd, 'Implementation of hook_@hook', '@count implementations of hook_@hook', array('@hook' => $hook, '@count' => $ctd)), 'items' => $imp)),
+    ); 
+  }
+  
+  return $form;
+}
+
+function dvtoolbox_hook_form_submit($form, &$form_state) {
+  $hook = check_plain($form_state['values']['hook']);
+  $form_state['temporary'] = array('hook' => $hook);
+  $form_state['rebuild'] = TRUE;
+  module_implements($hook, TRUE, TRUE);
+  drupal_set_message(t('Hook implementation cache rebuilt for @hook', array('@hook' => $hook)), 'status');
+}
+
+/**
+ * Cleans hook implementation cache
+ */
+function dvtoolbox_hook_rebuild($hook) {
+  $hook = check_plain($hook);
+  $_SESSION['dvtoolbox-hook'] = $hook;
+  module_implements($hook, TRUE, TRUE);
+  if (module_exists('devel')) {
+    dpm(module_implements($hook, TRUE), $hook);
+  }
+  drupal_set_message(t('Hook implementation cache rebuilt for @hook', array('@hook' => $hook)), 'status');
+  if (!empty($_REQUEST['destination'])) {
+    drupal_goto($_REQUEST['destination']);
+  }
+  drupal_goto('admin/config/development/dvtooblox-hooks');
+}
+
+/**
+ * Cleans cache and other stuff
+ */
+function dvtoolbox_cache_clean() {
+  cache_clear_all('*', 'cache', TRUE);
+  module_implements('form_alter',FALSE,TRUE);
+  menu_rebuild();
+  if (module_exists('variable')) variable_cache_clear();
+  drupal_theme_rebuild();
+  field_info_cache_clear();
+  cache_clear_all('image_styles', 'cache');
+  cache_clear_all('image_effects:', 'cache', TRUE);
+  drupal_static_reset('image_styles');
+  drupal_static_reset('image_effects');
+  drupal_set_message(t('All caches cleared'), 'status');
+  ctools_include('object-cache');
+  ctools_object_cache_clean(-1);
+  module_load_include('variable.inc', 'portales7');
+  $options = array();
+  $vars = portales7_variable_info($options);
+  $controller = variable_realm_controller('language');
+  $old_variables = $controller->getEnabledVariables();
+  foreach($vars as $k => $v) {
+    if (!empty($v['localize'])) $old_variables[] = $k;
+  }
+  $controller->setRealmVariable('list', $old_variables);
+  
+  
+  if (module_exists('ctools')) {
+    ctools_include('object-cache');
+    ctools_object_cache_clean(-1);
+  }
+  if (!empty($_REQUEST['destination'])) {
+    drupal_goto($_REQUEST['destination']);
+  }
+  if (!empty($_SERVER['HTTP_REFERER'])) {
+    
+    drupal_goto($_SERVER['HTTP_REFERER'], array('external' => TRUE));
+  }
+  drupal_goto();
+}
+
+/**
+ * Implements hook_ctool_plugin_directory
+ */
+function dvtoolbox_ctools_plugin_directory($module, $plugin) {
+  if ($module == 'ctools' && !empty($plugin)) {
+   return "plugins/$plugin";
+ }
+}
+
+/**
+ * Implement hook_ctools_plugin_api().
+ */
+function dvtoolbox_ctools_plugin_api($module, $api) {
+  return array('version' => 1);
+}
+
+/**
+ * Provides a select friendly options array from a taxonomy vocabulary 
+ */
+function dvtoolbox_get_taxonomy_options($vid, $parent = 0, $any = FALSE, $indent = TRUE, $options = array()) {
+  if (!is_numeric($vid)) {
+    $voc = taxonomy_vocabulary_machine_name_load($vid);
+    $vid = $voc->vid;
+  }
+  $tree = taxonomy_get_tree($vid);
+  if ($any) {$options['any'] = '-- ' . t('Any') . ' --';}
+  foreach ($tree as $t) {
+    $options[$t->tid] = ($indent ? str_repeat('-', $t->depth) . ($t->depth ? ' ' : '') : '') . $t->name;
+  }
+  return $options;
+}
+
+
+/**
+ * Provides a select friendly options array from a taxonomy vocabulary 
+ */
+function dvtoolbox_get_taxonomy_options_text($vid, $parent = 0, $indent = TRUE) {
+  if (!is_numeric($vid)) {
+    $voc = taxonomy_vocabulary_machine_name_load($vid);
+    $vid = $voc->vid;
+  }
+  $tree = taxonomy_get_tree($vid);
+  $options = array();
+  foreach ($tree as $t) {
+    $options[$t->name] = ($indent ? str_repeat('-', $t->depth) . ($t->depth ? ' ' : '') : '') . i18n_taxonomy_taxonomy_term_label($t, 'taxonomy_term');
+  }
+  return $options;
+}
+
+
+
+/**
+ * Implements hook_permission()
+ */
+function dvtoolbox_permission() {
+  return array(
+    'dvtoolbox use data storage' => array(
+      'title' => t('Use data storage'),
+      'description' => t('Allows user to store custom data on the database usin ajax calls. Allow anonymous users to use data storage will make them share all data because the uid will be always 0.'),
+  ));
+}
+
+/**
+ * Implements hook_user_delete()
+ */
+function dvtoolbox_user_delete($account) {
+  db_delete('dvtoolbox_datastorage')->condition('uid', $account->uid)->execute();
+}
+
+/**
+ * Implements hook_form_node_form_alter().
+ */
+function dvtoolbox_form_node_form_alter(&$form, &$form_state, $form_id) {
+  $form['actions']['san'] = array(
+  '#type' => 'submit',
+  '#value' => t('Save and new'),
+  '#submit' => array('node_form_submit', 'dvtoolbox_save_and_continue_submit'),
+  '#weight' => (!empty($form['actions']['preview']['#weight']) ? $form['actions']['preview']['#weight'] : $form['actions']['preview']['#weight']) + 1, 
+  );
+  $form['#submit'][] = 'dvtoolbox_save_and_continue_submit';
+}
+
+/**
+ * Submit callback form save & new action
+ */
+function dvtoolbox_save_and_continue_submit(&$form, $form_state) {
+  if ($form_state['values']['op'] == $form_state['values']['san']) {
+    $type_url_str = str_replace('_', '-', $form['#bundle']);
+    $_GET['destination'] = 'node/add/' . $type_url_str;
+  }
+}
+
+/**
+ * Implements hook_init();
+ */
+function dvtoolbox_init() {
+  $GLOBALS['conf']['image_allow_insecure_derivatives'] = TRUE;
+}
+
+/**
+ * Helper function to generate cid from an array
+ */
+function dvtoolbox_cid_generate($data){
+  return dvtoolbox_join_recursive(':', $data);
+}
+
+/**
+ * Helper function to recursively join an array()
+ */
+function dvtoolbox_join_recursive($glue, $data){
+  if (is_scalar($data)) return $data;
+  if (is_array($data)) {
+    foreach ($data as $k => $v) {
+      $data[$k] = dvtoolbox_join_recursive($glue, $v);
+    }
+    return join($glue, $data);
+  }
+}
+ 
+
+function dvtoolbox_epsacrop_styles($styles, $enable = TRUE) {
+  if ($enable && !module_exists('epsacrop')) {
+    dvtoolbox_module_enable(array('epsacrop', 'imagecache_canvasactions'));
+  }
+  if (!function_exists('_epsacrop_load_styles')) {
+    drupal_set_message(st("Function %function doesn't exist", array('%function' => '_epsacrop_load_styles')), 'error');
+    return drupal_map_assoc(array_keys($tyles));
+  }
+  return drupal_map_assoc(array_intersect(array_keys(_epsacrop_load_styles()), array_keys($styles)));
+}
+
+function dvtoolbox_module_enable($modules) {
+  $t = get_t();
+  $msgs = array();
+  foreach( $modules as $module) {
+    if (!module_exists($module)) {
+      try {
+        if (!module_enable(array($module))) throw new Exception("Can't enable module $module");
+        $msgs[] = $t("Enabled module %module", array('%module' => $module));
+      }
+      catch (Exception $e) {
+        $msgs[] = $t("!e exception ocurred enabling %module", array('!e' => $e->getMessage(), '%module' => $module));
+        watchdog('update', "!e exception ocurred enabling %module", array('!e' => $e->getMessage(), '%module' => $module), WATCHDOG_ERROR);
+      }
+    }
+  }
+  return $msgs;
+}
+
+function dvtoolbox_module_disable($modules) {
+  $t = get_t();
+  $msgs = array();
+  foreach( $modules as $module) {
+    if (module_exists($module)) {
+      try {
+        module_disable(array($module));
+        $msgs[] = $t("Disabled module %module", array('%module' => $module));
+      }
+      catch (Exception $e) {
+        $msgs[] = $t("!e exception ocurred disabling %module", array('!e' => $e->getMessage(), '%module' => $module));
+        watchdog('update', "!e exception ocurred disabling %module", array('!e' => $e->getMessage(), '%module' => $module), WATCHDOG_ERROR);
+      }
+    }
+  }
+  return $msgs;
+}
+
+
+function dvtoolbox_create_vocabularies($new_vocs = array(), $new_terms = array()) {
+  $msgs = array();
+  $t = get_t();
+  foreach ($new_vocs as $voc) {
+    if (!taxonomy_vocabulary_machine_name_load($voc->machine_name)) {
+      taxonomy_vocabulary_save($voc);
+      $msgs[] = $t('Vocabulary @voc has been created.', array('@voc' => $voc->name));
+    }
+  }
+  foreach ($new_terms as $voc => $terms){
+    foreach ($terms as $parent => $childs) {
+      if (!is_numeric($parent)) {
+        $pt = dvtoolbox_get_taxonomy_term_by_name($parent, $voc, TRUE, 0);
+        $parent = $pt->tid;
+      }
+      foreach ($childs as $tn) {
+        dvtoolbox_get_taxonomy_term_by_name($tn, $voc, TRUE, $parent);
+        $msgs[] = $t('Term @term has been created on @voc', array('@term' => $tn, '@voc' => $voc));
+      }
+    }
+  }
+  return $msgs;
+}
+
+
+function dvtoolbox_var_export($var, $level = 0) {
+  $prefix = str_repeat('  ', $level);
+  if (is_numeric($var)) {
+    return $var;
+  }
+  if (is_string($var)) {
+    return "'$var'";
+  }
+  if (is_array($var)) {
+    $output = "array(";
+    if (!empty($var)){
+      $output .= "\n";
+      foreach ($var as $k => $v) {
+        if (is_string($k)) $output .= $prefix . "  '$k' => ";
+        else $output .= $prefix . "  $k => ";
+        $output .= dvtoolbox_var_export($v, $level +1);
+        $output .= ",\n";
+      }
+      $output .= $prefix;
+    }
+    $output .= ")";
+    return $output;
+  }
+  if (is_null($var)) return 'NULL';
+  if (is_bool($var)) return $var ? 'TRUE' : 'FALSE';
+  if (is_object($var)) {
+    $output = "(object)array(";
+    if (!empty($var)){
+      $output .= "\n";
+      foreach ($var as $k => $v) {
+        if (is_string($k)) $output .= $prefix . "  '$k' => ";
+        else $output .= $prefix . "  $k => ";
+        $output .= dvtoolbox_var_export($v, $level +1);
+        $output .= ",\n";
+      }
+      $output .= $prefix;
+    }
+    $output .= ")";
+    return $output;
+  }
+  return "not implemented";
+}
+
+function dvtoolbox_grant_permissions($perms, $create_role_if_not_exists = TRUE) {
+  $p = &drupal_static(__FUNCTION__);
+  if (empty($p)) {
+    $p = drupal_map_assoc(array_keys(module_invoke_all('permission')));
+  }
+  foreach ($perms as $role_name => $permissions) {
+    if (!($role = user_role_load_by_name($role_name)) && $create_role_if_not_exists) {
+      $role = new stdClass();
+      $role->name = $role_name;
+      user_role_save($role);
+    }
+    if ($role) {
+      $permissions = array_keys(array_intersect_key($permissions, $p));
+      if (is_array($permissions)) {
+        user_role_grant_permissions($role->rid, $permissions);
+      }
+    }
+  }
+}
+
+function dvtoolbox_curl_get($url, $method = 'GET', $data = array()){
+    if (empty($url)) return "";
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_FAILONERROR, 1);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 7);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 1);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+    curl_setopt($ch, CURLOPT_HEADER, 0);
+    //TODO: Quitar esta opción
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
+    if ($method == 'JSON') {
+      $data_string = json_encode($data);
+      curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "POST");
+      curl_setopt($ch, CURLOPT_POSTFIELDS, $data_string);
+      curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+          'Content-Type: application/json',
+          'Content-Length: ' . strlen($data_string))
+      );
+    }
+    elseif ($method == 'JSON-PUT') {
+      $data_string = json_encode($data);
+      curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PUT");
+      curl_setopt($ch, CURLOPT_POSTFIELDS, $data_string);
+      curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+          'Content-Type: application/json',
+          'Content-Length: ' . strlen($data_string))
+      );
+    }
+    elseif ($method == 'POST') {
+      curl_setopt($ch, CURLOPT_POST, 1);
+      curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+    }
+    else {
+      curl_setopt($ch, CURLOPT_HTTPGET, 1);
+      curl_setopt($ch, CURLOPT_URL, url($url, array('query' => $data)));
+    }
+    $get = curl_exec($ch);
+    if (curl_error($ch)) {
+      drupal_set_message("CURL error: " . curl_error($ch) . ' on ' . $method . ':' . $url, 'error');
+    }
+    curl_close($ch);
+    return $get;
+}
+
+function dvtoolbox_jsapp_authenticate($conf) {
+  global $user;
+  if ($user->uid == 1) {
+    $trace = debug_backtrace();
+    throw new Exception(t('Called a deprecated function @function on @file line @line', array('@function' => __FUNCTION__, '@file' => $trace[1]['file'], '@line' => $trace[1]['line'])));
+    watchdog('deprecated', 'Called a deprecated function @function on @file line @line', array('@function' => __FUNCTION__, '@file' => $trace[1]['file'], '@line' => $trace[1]['line']), WATCHDOG_ERROR);
+  }
+  
+  return jsapp_authentication($conf);
+}
+
+function dvtoolbox_jsapp_send_authorization($conf) {
+  global $user;
+  if ($user->uid == 1) {
+    $trace = debug_backtrace();
+    throw new Exception(t('Called a deprecated function @function on @file line @line', array('@function' => __FUNCTION__, '@file' => $trace[1]['file'], '@line' => $trace[1]['line'])));
+    watchdog('deprecated', 'Called a deprecated function @function on @file line @line', array('@function' => __FUNCTION__, '@file' => $trace[1]['file'], '@line' => $trace[1]['line']), WATCHDOG_ERROR);
+  }
+  return jsapp_send_authorization($conf);
+}
+
+function dvtoolbox_jsapp_login_bar() {
+  global $user;
+  if ($user->uid == 1) {
+    $trace = debug_backtrace();
+    throw new Exception(t('Called a deprecated function @function on @file line @line', array('@function' => __FUNCTION__, '@file' => $trace[1]['file'], '@line' => $trace[1]['line'])));
+    watchdog('deprecated', 'Called a deprecated function @function on @file line @line', array('@function' => __FUNCTION__, '@file' => $trace[1]['file'], '@line' => $trace[1]['line']), WATCHDOG_ERROR);
+  }
+  return jsapp_login_bar();
+}
+
+function dvtoolbox_load_fc_entities($items) {
+  $fcids = array();
+  foreach ($items as $item) {
+    if (is_a($item, 'FieldCollectionItemEntity')) {
+      $fcids[] = $item->id;
+    }
+    else {
+      $fcids[] = $item['value'];
+      }
+  }
+  return entity_load('field_collection_item', $fcids);
+}
+
+function dvtoolbox_clean_uri($uri) {
+  if (!function_exists('transliteration_clean_filename')) return $uri;
+  return dirname($uri) . DIRECTORY_SEPARATOR . transliteration_clean_filename(basename($uri));
+}
+
+function theme_dvtoolbox_popup_image($image, $preset, $gid = '', $attributes = array()) {
+  if (!empty($image->uri)) {
+    $img = theme('image_style', array('style_name' => $preset, 'path' => $image->uri, 'attributes' => $attributes));
+    $link_path = file_create_url($image->uri);
+    return l($img, $link_path, array('html' => TRUE, 'attributes' => array('class' => 'colorbox-load', 'rel' => 'gallery-'. $gid)));
+  }
+}
+
+
+function dvtoolbox_copy_resources($base, $dest) {
+  $files = file_scan_directory( $base, '/.*/');
+  foreach ($files as $uri => $file) {
+    $file->status = FILE_STATUS_PERMANENT;
+    $new_uri = str_replace($base, $dest, $uri);
+    $dir = dirname($new_uri);
+    file_prepare_directory($dir, FILE_MODIFY_PERMISSIONS|FILE_CREATE_DIRECTORY);
+    if ($file = file_copy($file, $new_uri, FILE_EXISTS_REPLACE)) {
+      file_usage_add($file, 'portales7', 'resource', $file->fid);
+    }
+  }
+}
+
+
+function dvtoolbox_form_page_manager_handler_export_alter(&$form, &$form_state) {
+  $form['code']['#default_value'] = "<?php\n" . $form['code']['#default_value'];
+}
+
+if (module_exists('devel')) { module_load_include('misc.inc', 'dvtoolbox');}

@@ -1,0 +1,292 @@
+<?php
+/**
+ * Implements hook_ctool_plugin_directory
+ */
+ 
+
+function dvgp_ctools_plugin_directory($module, $plugin) {
+  if ($module == 'ctools' && !empty($plugin)) {
+   return "plugins/$plugin";
+ }
+}
+
+function dvgp_admin_form() {
+  $form['dvgp_appname'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Google Application Name'),
+    '#default_value' => variable_get('dvgp_appname', ''),
+  );
+  $form['dvgp_appid'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Google client id'),
+    '#default_value' => variable_get('dvgp_appid', ''),
+  );
+  $form['dvgp_appsecret'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Secret'),
+    '#default_value' => variable_get('dvgp_appsecret', ''),
+  );
+  return system_settings_form($form);
+}
+
+function dvgp_init() {
+  try {
+  if (variable_get('dvgp_appid', TRUE) && !isset($_GET['code']) && isset($_SESSION['gp_token'])) {
+    dvgp_helper();
+    if (($_GET['q'] != 'dvgp/logout') && ($gpuser = dvgp_normalize_user())) {
+      drupal_add_js(array('dvgp_user' => $gpuser), 'setting');
+    }
+  }
+  }
+  catch (Google_Auth_Exception $e){
+    drupal_set_message(__FUNCTION__ . ': auth: ' . $e->getMessage());
+    //dpm($e, __FUNCTION__);
+  }
+  catch (Exception $e){
+    drupal_set_message(__FUNCTION__ . ': ' . $e->getMessage());
+    //dpm($e, __FUNCTION__);
+  }
+}
+
+function dvgp_client($path = NULL) {
+  if (empty($path)) $path = $_GET['q'];
+  $clients = &drupal_static(__FUNCTION__);
+  if (TRUE || empty($clients[$path])) {
+    try {
+      $gp_lib_path = (function_exists('libraries_get_path') ? libraries_get_path('google-api-php-client') : 'sites/all/libraries/google-api-php-client') . '/src';
+      ini_set('include_path', ini_get('include_path') . PATH_SEPARATOR . $gp_lib_path);
+      require_once 'Google/Client.php';
+      require_once 'Google/Service/Plus.php';
+      $client = new Google_Client();
+      $client->setApplicationName(variable_get('dvgp_appname', ''));
+      $client->setClientId(variable_get('dvgp_appid', ''));
+      $client->setClientSecret(variable_get('dvgp_appsecret', ''));
+      $client->setRedirectUri(url('dvgp/login', array('absolute' => TRUE, 'alias' => TRUE, 'language' => (object)(array('language' => FALSE)))));
+      $client->setScopes(array('https://www.googleapis.com/auth/plus.login', 'https://www.googleapis.com/auth/userinfo.profile'));
+      $clients[$path] = $client;
+      if (!empty($_SESSION['gp_token'])) {
+        $client->setAccessToken($_SESSION['gp_token']);
+        if ($client->getAuth()->isAccessTokenExpired()) {
+          drupal_set_message(t('Google session has expired, please log in again'), 'warning');
+          unset($_SESSION['gp_token']);
+          drupal_static_reset('dvgp_session');
+          drupal_static_reset('dvgp_helper');
+          drupal_static_reset('dvgp_user');
+          unset($session['gp_token']);
+        }
+      }
+    }  
+    catch (Exception $e){
+      drupal_set_message(__FUNCTION__ . ': ' . $e->getMessage());
+    }
+  }
+  return $clients[$path];
+}
+
+function dvgp_helper($path = NULL) {
+  return dvgp_client($path);
+}
+
+function dvgp_session($reset = FALSE) {
+  $session = &drupal_static(__FUNCTION__);
+  try {
+    if ($reset || empty($session)) {
+      $client = dvgp_client(); 
+      if (!empty($_SESSION['gp_token'])) {
+        $session['gp_token'] = $_SESSION['gp_token'];
+      }
+      // Step 2: The user accepted your access now you need to exchange it.
+      elseif (isset($_GET['code'])) {
+        $client->authenticate($_GET['code']);  
+        $session['gp_token'] = $client->getAccessToken();
+        $_SESSION['gp_token'] = $client->getAccessToken();
+        unset($_GET['code']);
+      }
+    }
+  }
+  catch (Google_Auth_Exception $e) {
+    if ($client->getAuth()->isAccessTokenExpired()) {
+      drupal_set_message(t('Google session has expired, please log in again'), 'warning');
+      //drupal_goto('dvgp/logout?destination=' . $_GET['q']);
+      unset($_SESSION['gp_token']);
+      unset($session['gp_token']);
+    }
+  }
+  return $session;
+}
+
+
+function dvgp_user() {
+  $user = &drupal_static(__FUNCTION__);
+  if (empty($user) && ($session = dvgp_session()) && !(empty($session['gp_token']))) {
+    try {
+      $client = dvgp_client();
+      $client->setAccessToken($session['gp_token']);
+      $service = new Google_Service_Plus($client);
+      $user = $service->people->get('me');
+    }
+    catch (Google_Auth_Exception $e) {
+      if ($client->getAuth()->isAccessTokenExpired()) {
+        drupal_set_message(t('Google session has expired, please log in again'), 'warning');
+        //drupal_goto('dvgp/logout?destination=' . $_GET['q']);
+      }
+      //dpm('<pre>' . print_r($e,1) . '</pre>', __FUNCTION__);
+    }
+    catch (Exception $e) {
+      
+      drupal_set_message(__FUNCTION__ . ': ' . $e->getMessage(), 'error');
+    }
+  }
+  return $user;
+}
+
+function dvgp_menu() {
+  $items = array();
+  $items['admin/config/jsapp/dvgp'] = array(
+    'title' => 'Setup DVGP',
+    'description' => t('Configure DV Google Plus application'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('dvgp_admin_form'),
+    'access arguments' => array('administer drupal'),
+  );
+  $items['dvgp/login'] = array(
+    'title' => 'DVGP login',
+    'description' => t('Callback for login using Google Plus'),
+    'page callback' => 'dvgp_login',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );
+  $items['dvgp/logout'] = array(
+    'title' => 'DVGP logout',
+    'description' => t('Logs out Google Plus session from the site'),
+    'page callback' => 'dvgp_logout',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+function dvgp_login() {
+  if (!empty($_SESSION['dvgp_path'])) {
+    dvgp_session(TRUE);
+    $path = $_SESSION['dvgp_path'];
+    unset($_SESSION['dvgp_path']);
+    drupal_goto($path);
+  }
+  else {
+    drupal_goto();
+  } 
+}
+
+function dvgp_logout() {
+  unset($_SESSION['gp_token']);
+  drupal_static_reset('dvgp_session');
+  drupal_static_reset('dvgp_helper');
+  drupal_static_reset('dvgp_user');
+  drupal_goto();
+}
+
+function dvgp_theme($existing, $type, $theme, $path) {
+  return array(
+    'dvgp_user' => array(
+      'template' => 'dvgp_user',
+      'arguments'=> array('style_name' => 'original', 'dvgp_user' => NULL),
+      'path' => drupal_get_path('module', 'dvgp') . '/templates',
+    ),
+    'dvgp_login_button' => array(
+      'function' => 'theme_dvgp_login_button',
+      'arguments' => array(),
+    ),
+  );
+}
+
+function dvgp_preprocess_dvgp_user(&$vars) {
+  drupal_add_css(drupal_get_path('module', 'dvgp') . '/css/dvgp.css');
+  if (empty($vars['dvgp_user'])) {
+    $vars['dvgp_user'] = dvgp_user();
+  }
+  $user_profile = dvgp_normalize_user($vars['dvgp_user']);
+  $helper = dvgp_helper();
+  $session = dvgp_session();
+  $style = image_style_load($vars['style_name']);
+  $icon_src = drupal_get_path('module', 'dvgp') . '/images/g_logo.png'; 
+  $icon = image_style_path($style['name'], $icon_src);
+  if (!empty($vars['style_name'])) {
+    $style = image_style_load($vars['style_name']);
+    $icon = image_style_path($style['name'], $icon_src);
+    if (!file_exists($fb_icon)) {
+      image_style_create_derivative($tyle, $icon_src, $icon);
+    }
+  }
+  else {
+    $icon = $icon_src;
+  }
+  $vars['icon_tag'] = theme('image', array('path' => $icon, 'alt' => 'Google Plus icon', 'height' => '20px', 'width' => '20px'));
+  $vars['name'] = $user_profile['name'] ? $user_profile['name'] : $user_profile['first_name'] . ' ' . $user_profile['last_name'];
+  $vars['userId'] = $user_profile['id'];
+  $vars['picture'] = $user_profile['picture'];
+  return $vars;
+}
+
+function dvgp_normalize_user($gpuser = NULL) {
+  if (is_null($gpuser)) $gpuser = dvgp_user();
+  if (!$gpuser) return NULL;
+  return array(
+    'network' => 'google',
+    'id' => $gpuser->getId(),
+    'first_name'  => $gpuser->getName()->getGivenName(),
+    'last_name' => $gpuser->getName()->getFamilyName(),
+    'link' => $gpuser->getUrl(),
+    'name' => $gpuser->getDisplayName(),
+    'middle_name' => $gpuser->getName()->getMiddleName(),
+    'birthday' => $gpuser->getBirthday(),
+    'location' => $gpuser->getCurrentLocation(),
+    'gender' => $gpuser->getGender(),
+    'picture' => $gpuser->getImage()->getUrl(),
+  );
+}
+
+function theme_dvgp_login_button(&$vars) {
+  drupal_add_css(drupal_get_path('module', 'dvgp') . '/css/dvgp.css');
+  $client = dvgp_client();
+  $session = dvgp_session();
+  if ($client && !$client->getAccessToken() && !isset($session['token'])) {
+    $loginUrl = $client->createAuthUrl();
+  }
+  $style = image_style_load($vars['style_name']);
+  $icon_src = drupal_get_path('module', 'dvgp') . '/images/g_logo.png'; 
+  $icon = image_style_path($style['name'], $fb_icon_src);
+  if (!empty($vars['style_name'])) {
+    $style = image_style_load($vars['style_name']);
+    $icon = image_style_path($style['name'], $icon_src);
+    if (!file_exists($fb_icon)) {
+      image_style_create_derivative($tyle, $icon_src, $icon);
+    }
+  }
+  else {
+    $icon = $icon_src;
+  }
+  $_SESSION['dvgp_path'] = !empty($vars['path']) ? $vars['path'] : $_GET['q'];
+  $icon_tag = theme('image', array('path' => $icon, 'alt' => 'Google Plus icon', 'height' => '20px', 'width' => '20px'));
+  $link = l($icon_tag . '&nbsp;' . t('Login with google'), $loginUrl, array('html' => TRUE, 'attributes' => array('class' => array('dvgp-login'))));
+  $output = <<<EOD
+  <div class="dvgp-anon">
+<span class="link">
+<div>$link</div>
+</span>
+</div>
+EOD;
+  return $output;
+}
+
+function dvgp_jsapp_user() {
+  return array('google' => dvgp_normalize_user());
+}
+
+function dvgp_jsapp_login_button($vars) {
+  return array('google' => theme('dvgp_login_button', $vars));
+}
+
+function dvgp_jsapp_themed_user($vars) {
+  return array('google' => theme('dvgp_user', $vars));
+}

@@ -1,0 +1,345 @@
+<?php
+/**
+* @file
+* A block module that displays posts.
+*/
+
+/**
+* Implements hook_help.
+*
+* Displays help and module information.
+*
+* @param path
+*   Which path of the site we're using to display help
+* @param arg
+*   Array that holds the current path as returned from arg() function
+*/
+function portales7_listado_help($path, $arg) {
+  switch ($path) {
+    case "admin/help#portales7_listado":
+      return '<p>'.  t("Custom wiew panes") .'</p>';
+      break;
+  }
+}
+
+/**
+* Implements hook_menu().
+*/
+function portales7_listado_menu() {
+  $items = array();
+
+  $items['admin/dashboard/portales7/portales7_listado'] = array(
+    'title' => 'Portales 7 Listado',
+    'description' => 'Configuration for Portales 7 Listado',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('portales7_listado_form'),
+    'access arguments' => array('access administration pages'),
+    'type' => MENU_LOCAL_TASK,
+  );
+
+  return $items;
+}
+
+/**
+* Form function, called by drupal_get_form()
+* in current_posts_menu().
+*/
+function portales7_listado_form($form, &$form_state) {
+  $form['portales7_listado_type'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Type'),
+    '#default_value' => variable_get('portales7_listado_type', ''),
+    '#description' => t('Article type to show'),
+    '#required' => TRUE,
+  );
+  $form['portales7_listado_argument'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Argument'),
+    '#default_value' => variable_get('portales7_listado_argument', 'all'),
+    '#description' => t('Argument to filter contents.'),
+    '#required' => TRUE,
+  );
+  $form['portales7_listado_fields'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Fields'),
+    '#default_value' => variable_get('portales7_listado_fields', 'title,type,images:thumbnail'),
+    '#description' => t('Select which fields will be shown on Portales 7 Listado block.'),
+    '#required' => TRUE,
+  );
+
+  return system_settings_form($form);
+}
+
+
+
+
+/**
+* Implements hook_block_info().
+*/
+function portales7_listado_block_info() {
+  $blocks['portales7_listado'] = array(
+    'info' => t('Portales7 Listado'), //The name that will appear in the block list.
+    'cache' => DRUPAL_CACHE_PER_ROLE, //Default
+  );
+  return $blocks;
+}
+/**
+* Implements hook_block_view().
+*
+* Prepares the contents of the block.
+*/
+function portales7_listado_block_view($delta = '') {
+  switch($delta){
+    case 'portales7_listado':
+      $block['subject'] = t('Current posts');
+      if(user_access('access content')){
+        $type = variable_get('portales7_listado_type', '');
+        $fields = variable_get('portales7_listado_fields', 'title,type,images');
+        $argument = variable_get('portales7_listado_argument', 'all');
+        $block['content'] = _portales7_listado_get_contents($type, $argument, $fields);
+      }
+  }
+  return $block;
+}
+
+
+function _portales7_listado_get_contents($type, $arguments, $fields, $numitems, $offset) {
+  $view = _portales7_listado_prepare_view($type, $arguments, $fields, $numitems, $offset);
+  $output = $view->execute_display('default',$arguments);
+  return $output;
+}
+
+function _portales7_listado_prepare_view($type, $arguments, $fields, $numitems, $offset){
+  module_load_include('inc','portales7_listado', 'portales7_listado.util');
+  $view = _portales7_listado_get_view();
+  if (!preg_match('/^\{/', $fields)) {
+    if (!is_array($fields)) $fields = explode(',', $fields);
+    foreach ($fields as $field) {
+      $field = trim($field);
+      if (!empty($field)) {
+        $options = '';
+        if (strpos($field, ':') !== FALSE ){
+          list($field,$options) = explode(':', $field,2);
+        }
+        if (function_exists("_portales7_listado_add_$field")){
+          call_user_func_array("_portales7_listado_add_$field", array(&$view->display['default']->handler, $options));
+        }
+        else {
+          drupal_set_message(t('@field Is not a valid field', array('@field' => $field)), 'error');
+        }
+      }
+    }
+  }
+  else {
+    $fields = json_decode($fields);
+    foreach ($fields as $field => $options) {
+      $field = preg_replace('/^(open|close)div(_[0-9]+)/', '\\1div', $field);
+      if (function_exists("_portales7_listado_add_$field")){
+        call_user_func_array("_portales7_listado_add_$field", array(&$view->display['default']->handler, $options));
+      }
+      else {
+        drupal_set_message(t('@field Is not a valid field', array('@field' => $field)), 'error');
+      }
+    }
+  }
+  for ($i = 0; $i < count($type); $i++){
+    _portales7_listado_add_tid_filter($view->display['default']->handler, 'portales7_type', 'type', $type);
+  }
+  for ($i = 0; $i < count($arguments); $i++){
+    _portales7_listado_add_argument($view->display['default']->handler, 'tid_' . $i);
+  }
+  
+  _portales7_listado_set_num_items($view->display['default']->handler, $numitems, $offset);
+  return $view;
+}
+
+
+
+
+function portales7_listado_theme($existing, $type, $theme, $path) {
+  $themes = array();
+  $path = drupal_get_path('module', 'portales7_listado') . '/templates';
+  $files = scandir($path);
+  foreach ($files as $f) {
+    if (preg_match('/([^\.]+)\.tpl\.php/', $f, $parts)) {
+      $themes[$parts[1]] = array(
+        'template' => $parts[1],
+        'variables' => array('view' => NULL, 'options' => NULL, 'row' => NULL),
+        'base hook' => 'views_view_fields',
+        'path' => $path,
+      );
+    }
+  }
+  return $themes;
+}
+
+/**
+* Implementation of hook_ctools_plugin_dierctory() to let the system know
+* where our content_type plugins are.
+*/
+function portales7_listado_ctools_plugin_directory($module, $plugin) {
+  if ($module == 'ctools') {
+    return 'plugins/' . $plugin;
+  }
+}
+
+function portales7_listado_preprocess_views_view_fields(&$variables) {
+  module_load_include('inc', 'portales7_listado', 'portales7_listado.theme');
+  $user_func = 'portales7_listado_preprocess_' . $variables['view']->name;
+  if (function_exists($user_func)) {
+    #call_user_func($user_func, $variables);
+    $user_func($variables);
+  }
+  $variables['theme_hook_suggestion'] = $variables['view']->name;
+}
+
+/**
+ * Implement hook_ctools_plugin_api().
+ *
+ * If you do this, CTools will pick up default panels pages in
+ * <modulename>.pages_default.inc
+ */
+function portales7_listado_ctools_plugin_api($module, $api) {
+  if ($module == 'page_manager' && $api == 'pages_default') {
+    return array('version' => 1);
+  }
+}
+
+
+function _portales7_listado_generic_filefield_add($field, &$handler, $formatter = 'thumbnail') {
+  if ($formatter == 'original') $formatter = '';
+  /* Campo: Contenido: Images */
+  $handler->display->display_options['fields'][$field] = _portales7_listado_default_settings();
+  $handler->display->display_options['fields'][$field]['id'] = $field;
+  $handler->display->display_options['fields'][$field]['table'] = "field_data_$field";
+  $handler->display->display_options['fields'][$field]['field'] = $field;
+  $handler->display->display_options['fields'][$field]['click_sort_column'] = 'fid';
+  $handler->display->display_options['fields'][$field]['settings'] = array(
+    'image_style' => $formatter,
+    'image_link' => 'content',
+    'widthxheight' => $formatter,
+  );
+  $handler->display->display_options['fields'][$field]['group_rows'] = 1;
+  $handler->display->display_options['fields'][$field]['delta_offset'] = '0';
+  $handler->display->display_options['fields'][$field]['delta_reversed'] = 0;
+  $handler->display->display_options['fields'][$field]['delta_first_last'] = 0;
+  $handler->display->display_options['fields'][$field]['field_api_classes'] = 0;
+  $handler->display->display_options['fields'][$field]['element_wrapper_class'] = 'portales7-' . $formatter;
+  $handler->display->display_options['fields'][$field]['multi_type'] = 'ul';
+  $handler->display->display_options['fields'][$field]['separator'] = '';
+  
+}
+
+function _portales7_listado_generic_text_add($field, &$handler, $trim = 600) {  
+  _portales7_listado_generic_formatted_text_add($field, $handler, 'text_summary_or_trimmed', array('trim_length' => $trim));
+}
+
+function _portales7_listado_generic_formatted_text_add($field, &$handler, $formatter = 'text_summary_or_trimmed', $options = array('trim_length' => 600)) {
+  $handler->display->display_options['fields'][$field] = _portales7_listado_default_settings();
+  $handler->display->display_options['fields'][$field]['id'] = $field;
+  $handler->display->display_options['fields'][$field]['table'] = "field_data_$field";
+  $handler->display->display_options['fields'][$field]['field'] = $field;
+  $handler->display->display_options['fields'][$field]['type'] = $formatter;
+  $handler->display->display_options['fields'][$field]['settings'] = $options;
+}
+
+function _portales7_listado_generic_date_add($field, &$handler, $format = 'sin_hora'){
+  /* Campo: Contenido: News date */
+  $handler->display->display_options['fields'][$field] = _portales7_listado_default_settings();
+  $handler->display->display_options['fields'][$field]['id'] = $field;
+  $handler->display->display_options['fields'][$field]['table'] = 'field_data_' . $field;
+  $handler->display->display_options['fields'][$field]['field'] = $field;
+  $defaults = array(
+    'fromto' => 'both',
+    'multiple_number' => '',
+    'multiple_from' => '',
+    'multiple_to' => '',
+  );
+  
+  if (is_object($format)) {
+    $format = json_decode(json_encode($format), TRUE);
+  }
+  elseif (is_string($format)) {
+    $format = array('type' => $format);
+  }
+  $handler->display->display_options['fields'][$field]['type'] = $format['type'];
+  if (empty($format['settings']) || !is_array($format['settings'])) $format['settings'] = array(); 
+  $handler->display->display_options['fields'][$field]['settings'] = array_merge($defaults, $format['settings']);
+}
+
+function _portales7_listado_generic_videos_add($field, &$handler, $formatter = '640x480') {
+  /* Campo: Contenido: Audio or video files */
+  $field = 'portales7_videos';
+  $handler->display->display_options['fields'][$field] = _portales7_listado_default_settings();
+  $handler->display->display_options['fields'][$field]['id'] = $field;
+  $handler->display->display_options['fields'][$field]['table'] = 'field_data_' . $field;
+  $handler->display->display_options['fields'][$field]['field'] = $field;
+  $handler->display->display_options['fields'][$field]['click_sort_column'] = 'fid';
+  $handler->display->display_options['fields'][$field]['settings'] = array(
+    'widthxheight' => $formatter,
+  );
+  $handler->display->display_options['fields'][$field]['group_rows'] = 1;
+  $handler->display->display_options['fields'][$field]['delta_offset'] = '0';
+  $handler->display->display_options['fields'][$field]['delta_reversed'] = 0;
+  $handler->display->display_options['fields'][$field]['delta_first_last'] = 0;
+  $handler->display->display_options['fields'][$field]['field_api_classes'] = 0;
+}
+
+function _portales7_listado_generic_field_add(&$handler, $field, $options = array()) {
+  /* Campo: Contenido: Título */
+  $handler->display->display_options['fields'][$field] = _portales7_listado_default_settings();
+  $handler->display->display_options['fields'][$field]['id'] = $field;
+  $handler->display->display_options['fields'][$field]['table'] = 'node';
+  $handler->display->display_options['fields'][$field]['field'] = $field;
+  $handler->display->display_options['fields'][$field]['label'] = '';
+  if (is_array($options)) {
+    foreach ($options as $k => $v) {
+      $handler->display->display_options['fields'][$field][$k] = $v;
+    }
+  }
+}
+
+function _portales7_listado_generic_taxonomy_field_add($field, &$handler) {
+  /* Campo: Contenido: Banner Group. */
+  $handler->display->display_options['fields'][$field]['id'] = $field;
+  $handler->display->display_options['fields'][$field]['table'] = 'field_data_' . $field;
+  $handler->display->display_options['fields'][$field]['field'] = $field;
+  $handler->display->display_options['fields'][$field]['label'] = '';
+  $handler->display->display_options['fields'][$field]['alter']['alter_text'] = 0;
+  $handler->display->display_options['fields'][$field]['alter']['make_link'] = 0;
+  $handler->display->display_options['fields'][$field]['alter']['absolute'] = 0;
+  $handler->display->display_options['fields'][$field]['alter']['external'] = 0;
+  $handler->display->display_options['fields'][$field]['alter']['replace_spaces'] = 0;
+  $handler->display->display_options['fields'][$field]['alter']['trim_whitespace'] = 0;
+  $handler->display->display_options['fields'][$field]['alter']['nl2br'] = 0;
+  $handler->display->display_options['fields'][$field]['alter']['word_boundary'] = 1;
+  $handler->display->display_options['fields'][$field]['alter']['ellipsis'] = 1;
+  $handler->display->display_options['fields'][$field]['alter']['more_link'] = 0;
+  $handler->display->display_options['fields'][$field]['alter']['strip_tags'] = 0;
+  $handler->display->display_options['fields'][$field]['alter']['trim'] = 0;
+  $handler->display->display_options['fields'][$field]['alter']['html'] = 0;
+  $handler->display->display_options['fields'][$field]['element_label_colon'] = FALSE;
+  $handler->display->display_options['fields'][$field]['element_default_classes'] = 1;
+  $handler->display->display_options['fields'][$field]['hide_empty'] = 0;
+  $handler->display->display_options['fields'][$field]['empty_zero'] = 0;
+  $handler->display->display_options['fields'][$field]['hide_alter_empty'] = 1;
+  $handler->display->display_options['fields'][$field]['type'] = 'i18n_taxonomy_term_reference_plain';
+  $handler->display->display_options['fields'][$field]['group_rows'] = 1;
+  $handler->display->display_options['fields'][$field]['delta_offset'] = '0';
+  $handler->display->display_options['fields'][$field]['delta_reversed'] = 0;
+  $handler->display->display_options['fields'][$field]['delta_first_last'] = 0;
+  $handler->display->display_options['fields'][$field]['field_api_classes'] = 0;
+}
+
+
+function portales7_listado_preprocess_panels_pane(&$variables) {
+  $pane = $variables['pane'];
+  if (!empty($pane->configuration['override_title']) && !empty($variables['title'])) {
+    $variables['title'] = t($variables['title']);
+  }
+}
+
+function portales7_listado_get_view() {
+  include dirname(__FILE__) . '/portales7_listado.view.inc';
+  return $view;
+}

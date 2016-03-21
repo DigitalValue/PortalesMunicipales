@@ -1,0 +1,5 @@
+name = Toolbox Fixes
+description = Contains snippets to fix issues not resolved yet in other modules
+version = 7.x-0.1
+package = by Digital Value, SL
+core = 7.x

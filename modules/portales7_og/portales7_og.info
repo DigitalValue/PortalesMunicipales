@@ -1,0 +1,11 @@
+name = Miniportales
+description = Compatiblidad con miniportales
+core = 7.x
+version = 3.2
+package = Portales 7 by Digital Value, SL.
+
+dependencies[] = og (2.x)
+dependencies[] = og_ui
+dependencies[] = spaces_og
+dependencies[] = purl
+dependencies[] = og_context

@@ -1,0 +1,96 @@
+{
+  "menus" : [
+    {
+      "menu_name" : "main-menu",
+      "title" : "Main menú",
+      "links" : [
+        "link_title" : "El Ayuntamiento",
+        "link_path" : "<nolink>",
+        "language" : "und"
+        "children" : [
+          {
+            "link_title" : "Saluda del alcalde",
+            "link_path" : "node/1010"
+          }
+        ]
+      ]
+    }
+  ],
+  "variables" : {
+    "site_name" : "Ayuntamiento de Alcantir",
+    "site_logo" : "images/logoalcantir.png",
+    "favicon" : "images/favicon.png"
+  }
+  "nodes" : {
+    "portales7_banner" : [
+      [1,"avisos.jpg","ca","Avisos","right-col","p7vars_youtube",0],
+      [1,"avisos.jpg","es","Avisos","right-col","p7vars_youtube",0],
+      [1,"avisos.jpg","en","Notifications","right-col","p7vars_youtube",0]
+    ],
+    "portales7_article" : [
+      {
+        "id" : 1,
+        "lang" : 'es',
+        "title" : 'titulo del nodo 1',
+        "body" : {
+          "value" : "este es el body del nodo",
+          "format" : "filtered_html"
+        }
+        "portales7_type" : ["noticia"],
+        "portales7_main_media" : {
+          "portales7_main_image" : { 
+            "path" : "images/alcalde.png",
+            "title" : "image title",
+            "alt" : "image alt"
+          },
+          "portales7_main_video" : {
+            "path" : "videos/video1.mp4",
+            "description" : "video del pleno de junio de 2015"
+          }
+        },
+        "portales7_media" : [
+          {
+            "name" : "Concejales electos"
+            "description" : {
+              "value" : "<table><tr><td>Paco Pérez</td><td>PP</td></tr><tr><td>Carlos Cervera</td><td>Compromís</td></tr></table>",
+              "format" : "full_html"
+            }
+            "portales7_images" : [
+              {
+                "path": "images/paco_perez.jpg",
+                "title": "Francisco Pérez",
+                "alt" : "Francisco Pérez"
+              },
+              {
+                "path" : "images/carlos_cervera.jpg",
+                "title" : "Carlos Cervera",
+                "alt" : " Carlos Cervera"
+              }            
+            ]
+          },
+          {
+            "name" : "Documentación",
+            "description" : {
+              "value" : "Documentación del pleno: convocatoria, mociones y actas de la sesión",
+              "format" : "filtered_html"
+            },
+            "portales7_files" : [
+              {
+                "path" : "files/convocatoria_pleno.pdf",
+                "description" : "Convocatoria pleno constituyente"
+              },
+              {
+                "path" : "files/mocion_pp.pdf",
+                "description" : "Moción presentada por el Partido Popular"
+              },
+              {
+                "path" : "files/acta_pleno_constituyente.pdf",
+                "description" : "Acta del pleno constituyente"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

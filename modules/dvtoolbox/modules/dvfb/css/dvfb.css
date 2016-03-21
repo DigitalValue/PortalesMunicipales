@@ -1,0 +1,7 @@
+.dvfb {font-weight: bold; width: 100%;}
+.dvfb img, .dvfb-login img { vertical-align: middle; display: inline; max-height: 19px;}
+
+.dvfb-logged { padding: 4px; width: 100%; background-color: #3B5998; color: #FFFFFF;}
+.dvfb-logged a {color: #FFFFFF;}
+.dvfb-logged .link {float: right;}
+.dvfb-anon a{ color: #3B5998;}

@@ -1,0 +1,441 @@
+<?php
+
+/**
+ * @file
+ * Install file for Node Example module.
+ *
+ * The definition of the fields for the module is here,
+ *
+ * @see http://drupal.org/node/707832
+ * @see http://drupal.org/node/443536
+ * @see field
+ */
+
+/**
+ * Implements hook_install()
+ */
+function portales7_node_install() {
+  variable_set('date_format_sin_hora', 'j/m/Y');
+  variable_set('node_submitted_portales7_node', 0);
+    $se_types = variable_get('save_edit_node_types', array());
+    $se_types['portales7_node'] = 'portales7_node';
+    variable_set('save_edit_node_types', $se_types);
+    //Activem la plantilla de nodo
+  variable_set('page_manager_node_view_disabled', 0);
+  menu_rebuild();
+}
+
+/**
+ * Implements hook_uninstall().
+ *
+ * This hook is called when the user not only has disabled the module,
+ * but also uninstalls it from the 'uninstall' tab in the module page.
+ *
+ * So it's a perfect time to remove our fields and instances and new
+ * node type from the database.
+ *
+ * @ingroup portales7_node
+ */
+
+function portales7_node_uninstall() {
+  module_load_include('node.inc', 'portales7_node');
+  // Gather all the example content that might have been created while this
+  // module was enabled.  Simple selects still use db_query().
+  // http://api.drupal.org/api/function/db_query/7
+  $sql = 'SELECT nid FROM {node} n WHERE n.type = :type';
+  $result = db_query($sql, array(':type' => 'portales7_node'));
+  $nids = array();
+  foreach ($result as $row) {
+    $nids[] = $row->nid;
+  }
+
+  // Delete all the nodes at once
+  // http://api.drupal.org/api/function/node_delete_multiple/7
+  node_delete_multiple($nids);
+
+  // Loop over each of the fields defined by this module and delete
+  // all instances of the field, their data, and the field itself.
+  // http://api.drupal.org/api/function/field_delete_field/7
+  foreach (array_keys(_portales7_node_installed_fields()) as $field) {
+    field_delete_field($field);
+  }
+
+  // Loop over any remaining field instances attached to the portales7_node
+  // content type (such as the body field) and delete them individually.
+  // http://api.drupal.org/api/function/field_delete_field/7
+  $instances = field_info_instances('node', 'portales7_node');
+  foreach ($instances as $instance_name => $instance) {
+    field_delete_instance($instance);
+  }
+
+  // Delete our content type
+  // http://api.drupal.org/api/function/node_type_delete/7
+  node_type_delete('portales7_node');
+
+  // Purge all field infromation
+  // http://api.drupal.org/api/function/field_purge_batch/7
+  field_purge_batch(1000);
+  
+  variable_del('date_format_sin_hora');
+  drupal_set_message(t('Portales 7 Node has been uninstalled successfully'));
+}
+
+/**
+ * Adds weight to banners
+ */
+function portales7_node_update_7001(){
+  module_load_include('node.inc', 'portales7_node');
+  _portales7_node_add_fields(array('portales7_banner_weight'));
+}
+
+/**
+ * Adds a field to events to choose calendar
+ */
+function portales7_node_update_7002(){
+  module_load_include('node.inc', 'portales7_node');
+  $voc = (object) array(
+    'vid' => 0,
+    'name' => 'Calendar',
+    'machine_name' => 'calendar',
+    'description' => 'A vocabulary for Portales 7 event calendars',
+    'hierarchy' => 0,
+    'module' => 'portales7_node',
+  );
+  if (!taxonomy_vocabulary_machine_name_load($voc->machine_name)) {
+    taxonomy_vocabulary_save($voc);
+    drupal_set_message(t('Vocabulary @voc has been created.', array('@voc' => $voc->name)), 'status');
+  }
+
+  _portales7_node_add_fields(array('portales7_eventcalendar'));
+  $groups = _portales7_node_installed_groups();
+  $new_groups = array('portales7_node' => array('portales7_event' => $groups['portales7_node']['portales7_event']));
+  module_load_include('fields.inc', 'dvtoolbox');
+  dvtoolbox_field_create_groups('node', $new_groups);
+}
+
+/**
+ * Adds a dedicated field for teasers
+ * Copies the summary value of body field to this new field
+ */
+function portales7_node_update_7003(){
+  module_load_include('node.inc', 'portales7_node');
+  _portales7_node_add_fields(array('portales7_teaser'));
+  $groups = _portales7_node_installed_groups();
+  $new_groups = array('portales7_node' => array('portales7_basic' => $groups['portales7_node']['portales7_basic']));
+  module_load_include('fields.inc', 'dvtoolbox');
+  dvtoolbox_field_create_groups('node', $new_groups);
+  db_query("replace into {field_data_portales7_teaser} select entity_type, bundle, deleted, entity_id, revision_id, language, delta, body_summary, body_format from {field_data_body} where bundle='portales7_node'");
+  db_query("replace into {field_revision_portales7_teaser} select entity_type, bundle, deleted, entity_id, revision_id, language, delta, body_summary, body_format from {field_revision_body} where bundle='portales7_node'");
+}
+
+/**
+ * Adds a field to tag nodes
+ */
+function portales7_node_update_7004(){
+  module_load_include('node.inc', 'portales7_node');
+  $voc = (object) array(
+    'vid' => 0,
+    'name' => 'Category',
+    'machine_name' => 'category',
+    'description' => 'A vocabulary for Portales 7 categories',
+    'hierarchy' => 0,
+    'module' => 'portales7_node',
+  );
+  if (!taxonomy_vocabulary_machine_name_load($voc->machine_name)) {
+    taxonomy_vocabulary_save($voc);
+    drupal_set_message(t('Vocabulary @voc has been created.', array('@voc' => $voc->name)), 'status');
+  }
+
+  if (db_table_exists('field_data_portales7_category')) {
+    if (!field_read_field('portales7_category', array('include_inactive' => TRUE))) {
+      db_drop_table('field_data_portales7_category');
+      db_drop_table('field_revision_portales7_category');
+    }
+  }
+  _portales7_node_add_fields(array('portales7_category'));
+  $groups = _portales7_node_installed_field_groups();
+  $new_groups = array(
+    'portales7_node' => array(
+      'portales7_event' => $groups['portales7_basic']['portales7_basic'],
+      'portales7_event' => $groups['portales7_info']['portales7_info'],
+      'portales7_event' => $groups['portales7_language']['portales7_language']
+    ),
+  );
+  module_load_include('fields.inc', 'dvtoolbox');
+  dvtoolbox_field_create_groups('node', $new_groups);
+}
+
+function portales7_node_update_7005(){
+  module_load_include('node.inc', 'portales7_node');
+  module_load_include('field.inc', 'dvtoolbox');
+  dvtoolbox_field_create_groups('node', _portales7_node_installed_field_groups());
+  variable_set('date_format_sin_hora', 'j/m/Y');
+}
+
+/**
+ * Enable and configure new modules
+ * Add new fields
+ * Update field group structure
+ * Add new taxonomy terms
+ */
+function portales7_node_update_7400(&$sandbox){
+  module_load_include('field.inc', 'dvtoolbox');
+  module_load_include('node.inc', 'portales7_node');
+  module_load_include('fc.inc', 'portales7_node');
+  
+  if (!module_exists('portales7_profile')) module_enable(array('portales7_profile'));
+  
+  $total = 10;
+  if (!isset($sandbox['total'])) {
+    $sandbox['total'] = $total;
+    $sandbox['current'] = 0;
+  }
+  $current = $sandbox['current']; 
+  
+  switch ($current) {
+    case 0:
+      //carrega de moduls
+      $new_modules = array(
+        'link',
+        'references',
+        'node_reference',
+        'video_embed_field',
+        'field_collection',
+        'epsacrop',
+        'imagecache_canvasactions',
+        'title',
+        'addthis',
+        'addthis_displays',
+      );
+      if (!module_exists('dvtoolbox')) {
+        module_enable(array('dvtoolbox'));
+      }
+      dvtoolbox_module_enable($new_modules);
+    break;
+    case 1:
+      //Configuracio de variables
+      $t = dvtoolbox_get_taxonomy_term_by_name('link', 'type', TRUE, 0);
+      variable_set('portales7_node_link_tid', $t->tid);
+      variable_set('pathauto_node_portales7_node_pattern', '[node:portales7_section]/[node:portales7_type]/[node:title]');
+      $se_types = variable_get('save_edit_node_types', array());
+      $se_types['portales7_node'] = 'portales7_node';
+      variable_set('save_edit_node_types', $se_types);
+      variable_set('node_submitted_portales7_node', FALSE);
+      
+      //Add a shorcut
+      $link = array(
+        'menu_name' => 'shortcut-set-1',
+        'link_title' => 'Add article',
+        'link_path' => 'node/add/portales7-node',
+        'weight' => 97,
+      );
+      menu_link_save($link);
+      
+      //Activem la plantilla de nodo
+      variable_set('page_manager_node_view_disabled', 0);
+      menu_rebuild();
+    break;
+    case 2:
+      //Creacio de camps en les taxonomies
+      module_load_include('taxonomy.inc', 'portales7_node');
+      dvtoolbox_field_create_fields(portales7_node_taxonomy_fields());
+      dvtoolbox_field_create_instances('taxonomy_term', portales7_node_taxonomy_instances());
+    break;
+    case 3:
+      //Termes de taxonomia
+      module_load_include('taxonomy.inc', 'portales7_node');
+      $default_vocabularies = portales7_node_default_taxonomy_vocabularies();
+      $default_terms = portales7_node_default_taxonomy_terms();
+      foreach(array('families', 'event_types', 'sections') as $voc_name) {
+        $new_vocs[$voc_name] = $default_vocabularies[$voc_name];
+        if (!empty($default_terms[$voc_name])) $new_terms[$voc_name] = $default_terms[$voc_name];
+      }
+      dvtoolbox_create_vocabularies($new_vocs, $new_terms);
+      dvtoolbox_get_taxonomy_term_by_name('aviso', 'type');
+    break;
+    case 4:
+      //creacio de camps
+      field_cache_clear();
+      $new_fields = array(
+        'portales7_related', 
+        'portales7_weblink', 
+        'portales7_families', 
+        'portales7_eventdate',
+        'portales7_event_place', 
+        'portales7_event_type',
+        'portales7_event_note',
+        'portales7_section', 
+        'portales7_videos',
+        'portales7_video_url', 
+        'portales7_pretitle', 
+        'portales7_subtitle',
+        'portales7_related_entity',
+        'portales7_main_image',
+        'portales7_images',
+        'portales7_social'
+      );
+      $fields = _portales7_node_installed_fields();
+      $add_fields = array();
+      foreach ($new_fields as $f) {
+        $add_fields[$f] = $fields[$f];
+      }
+      dvtoolbox_field_create_fields($add_fields);
+    break;
+    case 5:
+      // creacio dels field_collection
+      foreach (_portales7_node_fc_fields() as $bundle => $fields) {
+        $m = dvtoolbox_field_create_fields($fields);
+      }
+      $m = dvtoolbox_field_create_instances('field_collection_item', _portales7_node_fc_instances());
+    break;
+    case 6:
+      //configuracio del camp titul
+      _portales7_node_setup_title_field();
+    break;
+    case 7:
+      //Configuracio de les instances dels camps
+      field_cache_clear();
+      $instances = _portales7_node_installed_instances();
+      $m = dvtoolbox_field_create_instances('node', array('portales7_node' => $instances));
+      //_portales7_node_update_all_instances();
+    break;
+    case 8:
+      //Configuracio dels grups de camps
+      //Un fallo en la creacio dels groups obliga a fer esta solucio d'emergencia
+      db_query("delete from {field_group} where identifier <> concat_ws('|',group_name,entity_type,bundle,mode)");
+      db_query("delete from {field_group} where identifier = 'group_informacion|node|portales7_node|default'");
+      $groups = _portales7_node_installed_field_groups();
+      $m = dvtoolbox_field_create_groups('node', $groups);
+    break;
+    case 9:
+      //Actualisacio de les traduccions
+      module_load_include('translations.inc', 'portales7_profile');
+      if ($batch = portales7_profile_update_translations_batch_prepare()){
+        batch_set($batch);
+      }
+    break;
+  }
+  $sandbox['current'] = $current + 1;
+  $sandbox['#finished'] = ($current +1) / $total;
+  if ($sandbox['#finished'] === 1 ) {
+  }
+}
+
+/**
+ * Codigo para actualizar las instancias
+ */
+function _portales7_node_update_all_instances() {
+  module_load_include('node.inc', 'portales7_node');
+  $t = get_t();
+  foreach (_portales7_node_installed_instances() as $field_name => $instance) {
+    $instance['field_name'] = $field_name;
+    $instance['entity_type'] = 'node';
+    $instance['bundle'] = 'portales7_node';
+    try {
+      field_update_instance($instance);
+      drupal_set_message($t('Updated field instance @field in @bundle', array('@field' => $instance['field_name'], '@bundle' => $instance['bundle'])), 'status');
+    }
+    catch (Exception $e) {
+      drupal_set_message($t('Exception @e creating field @field', array('@e' => $e->getMessage(), '@field' => $field_name)), 'error');
+    }
+  }
+}
+
+/**
+ * Actualización de los campos de los field_collections
+ */
+function portales7_node_update_7500() {
+  module_load_include('field.inc', 'dvtoolbox');
+  module_load_include('fc.inc', 'portales7_node');
+  module_load_include('node.inc', 'portales7_node');
+  $m = dvtoolbox_field_create_instances('field_collection_item', _portales7_node_fc_instances());
+  $m += dvtoolbox_field_create_instances('node', array('portales7_node' => _portales7_node_installed_instances()));
+}
+
+/**
+ * Inclusión de las presentaciones de nodo
+ */
+function portales7_node_update_7501() {
+  module_load_include('node.inc', 'portales7_node');
+  module_load_include('field.inc', 'dvtoolbox');
+  $settings = variable_get('field_bundle_settings_node__portales7_node', array());
+  $settings = array_merge_recursive($settings, array('view_modes' => portales7_node_default_view_modes()));
+  variable_set('field_bundle_settings_node__portales7_node', $settings);
+  $m = dvtoolbox_field_create_fields(_portales7_node_installed_fields());
+  $m = dvtoolbox_field_create_instances('node', array('portales7_node' => _portales7_node_installed_instances()));
+  foreach ($m as $message) drupal_set_message($message, 'debug');
+}
+
+/**
+ * Inclusión de los grupos de banners "administracion",  "escaparate" y "Redes sociales"
+ */
+function portales7_node_update_7502() {
+  module_load_include('taxonomy.inc', 'portales7_node');
+  $synonyms = _portales7_node_default_synonyms();
+  $tt = get_t();
+  foreach (array('Administracion', 'Escaparate', 'Redes sociales') as $t) {
+    $term = dvtoolbox_get_taxonomy_term_by_name($t, 'banners', TRUE, 0);
+    if (!empty($synonyms[$t])) {
+      if (empty($term->portales7_term_synonyms['und'])) $term->portales7_term_synonyms['und'] = array();
+      foreach ($synonyms[$t] as $syn) {
+        $term->portales7_term_synonyms['und'][] = array('value' => $syn);
+      }
+      taxonomy_term_save($term);
+      if (empty($_GET['profile'])) drupal_set_message($tt('Added @synonyms as synonyms for @term', array('@synonyms' => join(', ', $synonyms[$t]), '@term' => $term->name)), 'status');
+    }
+  }
+}
+
+/**
+ * Ocultuar el campo idioma
+ */
+function portales7_node_update_7503() {
+  $settings = field_bundle_settings('node', 'portales7_node');
+  $view_modes = field_view_mode_settings('node', 'portales7_node');
+  foreach($view_modes as $view_mode => $info) {
+    $settings['extra_fields']['display']['language'][$view_mode]['visible'] = FALSE;
+  }
+  $settings['extra_fields']['display']['language']['default'] ['visible'] = FALSE;
+  field_bundle_settings('node', 'portales7_node', $settings);
+  field_info_cache_clear();
+}
+
+/**
+ * Añadir el grupo minibanners
+ */
+function portales7_node_update_7504() {
+  dvtoolbox_get_taxonomy_term_by_name('minibanners', 'banners', TRUE, 0);
+}
+
+/**
+ * Activa la promoción a portada por defecto
+ */
+function portales7_node_update_7505() {
+  variable_set('node_options_portales7_node', array('status','promoted'));
+}
+
+/**
+ * Creación de los campos para pasar de 7.5.0 a 7.5.2
+ */
+function portales7_node_update_7506() {
+  $fields = array(
+    'type' => 'entityreference',
+    'module' => 'entityreference',
+    'data' => 
+    'a:6:{s:8:"settings";a:3:{s:11:"target_type";s:4:"node";s:7:"handler";s:4:"base";s:16:"handler_settings";a:3:{s:14:"target_bundles";a:1:{s:14:"portales7_node";s:16:"portales7_entity";}s:4:"sort";a:1:{s:4:"type";s:4:"none";}s:9:"behaviors";a:1:{s:17:"views-select-list";a:1:{s:6:"status";i:0;}}}}s:12:"entity_types";a:0:{}s:12:"translatable";b:0;s:7:"storage";a:4:{s:4:"type";s:17:"field_sql_storage";s:8:"settings";a:0:{}s:6:"module";s:17:"field_sql_storage";s:6:"active";i:1;}s:12:"foreign keys";a:1:{s:4:"node";a:2:{s:5:"table";s:4:"node";s:7:"columns";a:1:{s:9:"target_id";s:3:"nid";}}}s:7:"indexes";a:1:{s:9:"target_id";a:1:{i:0;s:9:"target_id";}}}'
+  );
+  db_update('field_config')->fields($fields)->condition('field_name', 'portales7_re_entities')->condition('type', 'node_reference')->execute();
+  db_query('alter table {field_data_portales7_re_entities} change column portales7_re_entities_nid portales7_re_entities_target_id int(10) unsigned not null');
+  db_query('alter table {field_revision_portales7_re_entities} change column portales7_re_entities_nid portales7_re_entities_target_id int(10) unsigned not null');
+  module_load_include('inc', 'portales7_profile', 'includes/portales7_node');
+  portales7_profile_setup_portales7_node();
+}
+
+/**
+ * Reconfiguración de los campos
+ */
+function portales7_node_update_7520() {
+  variable_set('portales7_node_field_update_needed', TRUE);
+  $t = get_t();
+  drupal_set_message($t("Please visit !link to fix field's view modes", array('!link' => l($t('run fakeupdates'), 'dvtoolbox/run'))), 'warning');
+}

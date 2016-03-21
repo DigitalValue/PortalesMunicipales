@@ -1,0 +1,459 @@
+<?php
+/**
+ * @file
+ * This module provides a simple scheduler with limited
+ * capabilities. If you are looking for a robust scheduler
+ * try scheduler module.
+ * @author juanjo_dv
+ * @author Digital Value, SL http://www.digitalvalue.es
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function simplescheduler_menu() {
+  $items['admin/content/simplescheduler'] = array(
+    'title' => 'Scheduled actions',
+    'page callback' => 'simplescheduler_page',
+    'access arguments' => array('administer nodes'),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 99,
+  );
+  $items['admin/content/simplescheduler/scheduled'] = array(
+    'title' => 'Scheduled actions',
+    'page callback' => 'simplescheduler_page',
+    'page arguments' => array('0'),
+    'access arguments' => array('administer nodes'),
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => 91,
+  );
+  $items['admin/content/simplescheduler/success'] = array(
+    'title' => 'Successfull actions',
+    'page callback' => 'simplescheduler_page',
+    'page arguments' => array('1'),
+    'access arguments' => array('administer nodes'),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 92,
+  );
+  $items['admin/content/simplescheduler/fail'] = array(
+    'title' => 'Failed actions',
+    'page callback' => 'simplescheduler_page',
+    'page arguments' => array('2'),
+    'access arguments' => array('administer nodes'),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 93,
+  );
+  if (module_exists('total_control')) {
+    $items['admin/dashboard/content/simplescheduler'] = $items['admin/content/simplescheduler'];
+    $items['admin/dashboard/content/simplescheduler/scheduled'] = $items['admin/content/simplescheduler/scheduled'];
+    $items['admin/dashboard/content/simplescheduler/success'] = $items['admin/content/simplescheduler/success'];
+    $items['admin/dashboard/content/simplescheduler/fail'] = $items['admin/content/simplescheduler/fail'];
+  }
+  return $items;
+}
+
+function simplescheduler_page($status = 0) {
+  $query = db_select('simplescheduler', 's');
+  $actions = _simplescheduler_available_actions();
+  $header = array(
+    'opdate' => array('data' => t('Date'), 'field' => 'opdate'),
+    'title' => array('data' => t('Node'), 'field' => 'title'),
+    'operation' => array('data' => t('Operation'), 'field' => 'operation'),
+    'actions' => array('data' => t('Actions'))
+  );
+  $query->join('node', 'n', 's.nid = n.nid');
+  $query = $query->fields('s', array('opdate', 'operation', 'status'))
+    ->fields('n', array('title', 'language', 'nid'))
+    ->condition('s.status', $status)
+    ->extend('PagerDefault')
+    ->extend('TableSort')
+    ->orderByHeader($header)
+    ->limit(20);
+  if ($status === 0) {
+    $query->orderBy('opdate', 'ASC');
+  }
+  else {
+    $query->orderBy('opdate', 'DESC');
+  }
+  $res = $query->execute()->fetchAll();
+  $rows = array();
+  foreach ($res as $row) {
+    $newrow = array();
+    $newrow['opdate'] = format_date($row->opdate);
+    $newrow['title'] = l($row->title, 'node/' . $row->nid);
+    if (preg_match('/^category_(add|del)/', $row->operation)){
+      list($operation, $tid) = explode('-', $row->operation, 2);
+      $term = taxonomy_term_load($tid);
+      $newrow['operation'] = t('@action @term', array('@action' => $actions[$operation], '@term' => $term->name)); 
+    }
+    else {
+      $newrow['operation'] = t('@action', array('@action' => $actions[$row->operation]));
+    }
+    $newrow['actions'] = l(t('Edit'), 'node/' . $rown->nid . '/edit');
+    $rows[] = $newrow;
+  }
+  return theme('table', array('header' => $header, 'rows' => $rows)) . theme('pager');
+}
+
+
+/**
+ * Implements hook_cron().
+ */
+function simplescheduler_cron() {
+  $res = db_select('simplescheduler', 's')
+    ->fields('s', array())
+    //->condition('opdate', variable_get('simplescheduler_cron_last_run', 0), '>')
+    ->condition('opdate', $_SERVER['REQUEST_TIME'], '<=')
+    ->condition('status', 1, '<>')
+    ->orderBy('opdate', 'ASC')
+    ->execute()
+    ->fetchAll();
+  $queue = DrupalQueue::get('simplescheduler');
+  $queue->createQueue();
+  foreach ($res as $item) {
+    $queue->createItem($item);
+  }
+  variable_set('simplescheduler_cron_last_run', $_SERVER['REQUEST_TIME']);
+}
+
+/**
+ * Implements hook_form_node_form_alter().
+ */
+function simplescheduler_form_node_form_alter(&$form, $form_state) {
+  drupal_add_css(drupal_get_path('module', 'simplescheduler') . '/simplescheduler.css');
+  $available_actions = _simplescheduler_available_actions();
+  $internal_date_format = 'd-m-Y H:i';
+  $node = $form['#node'];
+
+  $ssoperations = array();
+  // if this is a preview then get the values from the form, not the db
+  if (isset($form_state['values']['op']) && $form_state['values']['op'] == t('Preview')) {
+    foreach ($form_state['values']['simplescheduler_container'] as $k => $v) {
+      if (preg_match('/(opdate|operation)\-(new|update)-[0-9]+/', $k, $parts)) {
+        $ssoperations[$parts[2]][$parts[3]][$parts[1]] = $v;
+      }
+    }
+  }
+  elseif (!empty($node->simplescheduler)) {
+    foreach ($node->simplescheduler as $schid => $v) {
+      $ssoperations['update'][$schid] = $v;
+    }
+  }
+  if (!empty($_REQUEST['simplescheduler']['simplescheduler_container'])) {
+    $data = $_REQUEST['simplescheduler']['simplescheduler_container'];
+    if (empty($data['opdate-add-0']['time'])) $data['opdate-add-0']['time'] = '00:00';
+    if (preg_match('/category_(add|del)/', $data['operation-add-0'])) {
+      $newop = strtotime($data['opdate-add-0']['date'] . ' ' . $data['opdate-add-0']['time'] . ':00') . '-' . $data['operation-add-0'] . '-' . $data['category-add-0'];
+    }
+    else {
+      $newop = strtotime($data['opdate-add-0']['date'] . ' ' . $data['opdate-add-0']['time'] . ':00') . '-' . $data['operation-add-0'];
+    }
+    $data['new_scheduled'][$newop] = $newop;
+    sort($data['new_scheduled']);
+    foreach ($data['new_scheduled'] as $v) {
+      list($opdate, $operation) = explode('-', $v, 2);
+      if (preg_match('/category_(add|del)/', $operation)) {
+        list($operation, $tid) = explode('-', $operation, 2);
+        $term = taxonomy_term_load($tid);
+        $ssoperations['new'][$v] = t('@operation @term on @opdate', array('@operation' => $available_actions[$operation], '@term' => $term->name, '@opdate' => format_date($opdate, 'custom', $internal_date_format)));
+      }
+      else {
+        $ssoperations['new'][$v] = t('@operation on @opdate', array('@operation' => $available_actions[$operation], '@opdate' => format_date($opdate, 'custom', $internal_date_format)));
+      }
+      
+    }
+    unset($ssoperations['add']);
+  }
+  if (empty($ssoperations['add'])) {
+    $ssoperations['add'] = array(
+      0 => array('opdate' => '', 'operation' => ''),
+      //1 => array('opdate' => '', 'operation' => ''),
+    );
+  }
+  $form['simplescheduler'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Simple Scheduling options'),
+    '#collapsible' => TRUE,
+    //TODO: choose when collapse the fieldset
+    //'#collapsed' => !$fieldset_extended,
+    '#weight' => 35,
+    '#group' => 'additional_settings',
+    '#tree' => TRUE,
+  );
+  $deletable = array();
+  foreach ($ssoperations['update'] as $schid => $v) {
+    if (preg_match('/^category_(add|del)/', $v['operation'])) {
+      list($operation, $tid) = explode('-', $v['operation']);
+      $term = taxonomy_term_load($tid);
+      $deletable[$schid] = t('@operation @term on @opdate', array('@operation' => $available_actions[$operation], '@term' => $term->name, '@opdate' => format_date($v['opdate'], 'custom', $internal_date_format)));
+    }
+    else {
+      $deletable[$schid] = t('@operation on @opdate', array('@operation' => $available_actions[$v['operation']], '@opdate' => format_date($v['opdate'], 'custom', $internal_date_format)));      
+    }
+    
+    $form['simplescheduler']['simplescheduler_container']['update-opdate-' . $schid] = array(
+      '#type' => 'value',
+      '#value' => $v['opdate']
+    );
+    $form['simplescheduler']['simplescheduler_container']['update-operation-' . $schid] = array(
+      '#type' => 'value',
+      '#value' => $v['operation']
+    );
+  }
+  if (!empty($deletable)) {
+    $form['simplescheduler']['delete_scheduled'] = array(
+      '#type' => 'checkboxes',
+      '#title' => t('Delete scheduled operations'),
+      '#description' => t('Select which scheduled operations must be unscheduled'),
+      '#default_value' => array(),
+      '#options' => $deletable,
+      '#weight' => 0,
+    );
+  }
+  $new = array();
+  $form['simplescheduler']['simplescheduler_container'] = array(
+    '#type' => 'container',
+    '#attributes' => array('id' => 'simplescheduler-operation-wrapper'),
+    '#weight' => 5,
+  );
+  if (!empty($ssoperations['new'])) {
+    $form['simplescheduler']['simplescheduler_container']['new_scheduled'] = array(
+      '#type' => 'checkboxes',
+      '#title' => t('New scheduled operations'),
+      '#description' => t('Select which scheduled operations must be scheduled. Any unchecked operations will be removed on node save or when adding a new operation.'),
+      '#default_value' => drupal_map_assoc(array_keys($ssoperations['new'])),
+      '#value' => drupal_map_assoc(array_keys($ssoperations['new'])),
+      '#options' => $ssoperations['new'],
+    );
+  }
+  foreach ($ssoperations['add'] as $schid => $v) {
+    $form['simplescheduler']['simplescheduler_container']['opdate-add-' . $schid] = array(
+      '#type' => 'date_popup',
+      '#date_format' => $internal_date_format,
+      '#date_year_range' => '0:+10',
+      //'#title' => t('Date'),
+      //'#default_value' => format_date($v['opdate'], 'custom', 'Y-m-d H:i:s'),
+      '#default_value' => '',
+      '#description' => t('Leave blank to disable scheduling'),
+      '#prefix' => '<div class="simplescheduler-operation" id="simplescheduler-operation">',
+    );
+    $form['simplescheduler']['simplescheduler_container']['operation-add-' . $schid] = array(
+      '#type' => 'select',
+      '#title' => t('Operation'),
+      '#options' => $available_actions,
+      //'#default_value' => $v['operation'],
+      '#default_value' => '',
+      '#description' => t('Choose operation to perform'),
+    );
+    $form['simplescheduler']['simplescheduler_container']['category-add-' . $schid] = array(
+      '#type' => 'select',
+      '#title' => t('Category'),
+      '#states' => array(
+        'visible' => array(
+          ':input[id=edit-simplescheduler-simplescheduler-container-operation-add-' . $schid . ']' => array(array('value' => 'category_add'), array('value' => 'category_del')),
+        ),
+      ),
+      '#options' => dvtoolbox_get_taxonomy_options('category'),
+      '#attributes' => array('class' => array('portales7-dynamic-field')),
+    );
+    $form['simplescheduler']['simplescheduler_container']['enddiv-' . $schid] = array(
+      '#type' => 'markup',
+      '#markup' => '</div>',
+    );
+  }
+  
+  $form['simplescheduler']['addoperations'] = array(
+    '#type' => 'button',
+    '#value' => t('Add'),
+    '#ajax' => array(
+      'callback' => '_simplescheduler_operation_add',
+      'wrapper' => 'simplescheduler-operation-wrapper',
+      'method' => 'replace',
+    ),
+    '#weight' => 10,
+    '#executes_submit_callback' => FALSE,
+    '#limit_validation_errors' => array(),
+  );
+}
+
+function _simplescheduler_operation_add($form, &$form_state) {
+  $form['simplescheduler']['simplescheduler_container']['opdate-add-0']['date']['#value'] = '';
+  $form['simplescheduler']['simplescheduler_container']['opdate-add-0']['time']['#value'] = '';
+  return $form['simplescheduler']['simplescheduler_container'];
+}
+
+/**
+ * Implements hook_cron_queue_info().
+ */
+function simplescheduler_cron_queue_info() {
+  $queues['simplescheduler'] = array(
+    'worker callback' => '_simplescheduler_queue_run',
+  );
+  return $queues;
+}
+
+/**
+ * Perform selected operation on a queued item
+ */
+function _simplescheduler_queue_run($item) {
+  $actions = _simplescheduler_available_actions();
+  if (empty($item->nid)) return FALSE;
+  if ($node = node_load($item->nid)) {
+    if (preg_match('/category_(add|delete)/', $item->operation)) {
+      list ($item->operation, $item->tid) = explode('-', $item->operation, 2);
+    }
+    switch ($item->operation) {
+      case 'publish':
+        $node->status = 1;
+        break;
+      case 'unpublish':
+        $node->status = 0;
+        break;
+      case 'promote':
+        $node->promote = 1;
+        break;
+      case 'demote':
+        $node->promote = 0;
+        break;
+      case 'sticky':
+        $node->sticky = 1;
+        break;
+      case 'unsticky':
+        $node->sticky = 0;
+        break;
+      case 'category_add':
+        $found = FALSE;
+        foreach ($node->portales7_category['und'] as $value) {
+          if (!empty($value['tid']) && ($value['tid'] == $item->tid)) $found = TRUE;
+        }
+        if (!$found) $node->portales7_category['und'][] = array('tid' => $item->tid);
+        break;
+      case 'category_del':
+        $node->portales7_category['und'] = array_merge(array(), array_filter($node->portales7_category['und'], function ($v) { return !empty($v['tid']) && ($v['tid'] != $item->tid);}));
+        break;
+    }
+    try {
+      node_save($node);
+      if (preg_match('/^category_(add|del)/', $item->operation)) {
+        $term = taxonomy_term_load($item->tid);
+        watchdog('simplescheduler', 'Operation "@op @term" has succeded on node "@nid"', array('@nid' => $item->nid, '@term' => $term->name, '@op' => $actions[$item->operation]), WATCHDOG_NOTICE);
+        unset($item->tid);
+      }
+      else {
+        watchdog('simplescheduler', 'Operation "@op" has succeded on node "@nid"', array('@nid' => $item->nid, '@op' => $actions[$item->operation]), WATCHDOG_NOTICE);
+      }
+      $item->status = 1;
+    }
+    catch (Exception $e) {
+      watchdog('simplescheduler', "Can't perform operation \"@op\" on node \"@nid\". Error was: @error", array('@nid' => $item->nid, '@op' => $actions[$item->operation], '@error' => $e->getMessage()), WATCHDOG_ERROR);
+      $item->status = 2;
+    }
+  }
+  else {
+    watchdog('simplescheduler', "Can't find node \"@nid\"", array('@nid' => $item->nid), WATCHDOG_ERROR);
+    $item->status = 2;
+  }
+  unset($item->operation);
+  $item->performed = time();
+  drupal_write_record('simplescheduler', $item, array('schid'));
+}
+
+/**
+ * Implements hook_node_presave().
+ */
+function simplescheduler_node_presave($node) {
+  if (!empty($node->simplescheduler['simplescheduler_container']['opdate-add-0'])) {
+    $opdate = strtotime($node->simplescheduler['simplescheduler_container']['opdate-add-0']);
+    $operation = $node->simplescheduler['simplescheduler_container']['operation-add-0'];
+    $key = $opdate . '-' . $operation;
+    if (preg_match('/^category_(add|del)/', $operation)) {
+      $key .= '-' . $node->simplescheduler['simplescheduler_container']['category-add-0'];
+    }
+    $node->simplescheduler['simplescheduler_container']['new_scheduled'][$key] = $key;
+  }
+  if (isset($node->simplescheduler['delete_scheduled'])) {
+    foreach ($node->simplescheduler['delete_scheduled'] as $k => $v) {
+      if (empty($v)) $node->simplescheduler[$k] = $k;
+    }
+    unset($node->simplescheduler['delete_scheduled']);
+  }
+}
+
+/**
+ * Implements hook_node_update().
+ */
+function simplescheduler_node_update($node) {
+  global $user;
+  if (empty($node->simplescheduler['simplescheduler_container'])) return;
+  $operations = array();
+  foreach ((array)$node->simplescheduler['simplescheduler_container']['new_scheduled'] as $k => $v) {
+    if (!empty($v)) {
+      $operations['new'][] = array_combine(array('opdate', 'operation'), explode('-', $v, 2));
+    }
+  }
+  if (!empty($node->original->simplescheduler)) {
+    foreach ($node->original->simplescheduler as $k => $v) {
+      if (empty($node->simplescheduler[$k])) $operations['delete'][] = $k;
+    }
+  }
+
+  unset($node->simplescheduler['simplescheduler_container']);
+  if (!empty($operations['delete'])) {
+    foreach ((array)$operations['delete'] as $schid) {
+      db_delete('simplescheduler')
+        ->condition('schid', $schid)
+        ->execute();
+    }
+  }
+  if (!empty($operations['new'])) {
+    foreach ((array)$operations['new'] as $k => $v) {
+      if (!empty($v)) {
+        db_insert('simplescheduler')
+          ->fields(array(
+            'schid' => '0',
+            'nid' => $node->nid,
+            'operation' => $v['operation'],
+            'opdate' => $v['opdate'],
+            'uid' => $user->uid,
+          ))
+          ->execute();
+      }
+    }
+  }
+}
+
+function simplescheduler_node_insert($node) {
+  simplescheduler_node_update($node);
+}
+
+function simplescheduler_node_delete($node) {
+  db_delete('simplescheduler')
+    ->condition('nid', $node->nid)
+    ->execute();
+}
+
+function simplescheduler_node_load($nodes, $types) {
+  $internal_date_format = variable_get('simplescheduler_date_format', 'd-m-Y H:i');
+  foreach ($nodes as $nid => $node) {
+    $query = db_select('simplescheduler', 's')
+      ->fields('s', array())
+      ->condition('s.nid', $node->nid, '=')
+      ->condition(db_or()->condition('opdate', REQUEST_TIME, '>')->condition('status', 1, '<>'))
+      ->orderBy('opdate', 'ASC')
+      ->orderBy('schid', 'ASC');
+    $nodes[$node->nid]->simplescheduler = $query->execute()->fetchAllAssoc('schid', PDO::FETCH_ASSOC);
+  }
+}
+
+function _simplescheduler_available_actions() {
+  return array(
+    'publish' => t('Publish'),
+    'unpublish' => t('Unpublish'),
+    'promote' => t('Promote to the front page'),
+    'demote' => t('Remove from front page'),
+    'sticky' => t('Sticky'),
+    'unsticky' => t('Unsticky'),
+    'category_add' => t('Add category'),
+    'category_del' => t('Remove category'),
+  );
+}

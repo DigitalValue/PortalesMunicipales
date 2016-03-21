@@ -1,0 +1,110 @@
+<?php
+function dvfixes_update_7400() {
+  module_load_include('node.inc', 'portales7_node');
+  module_load_include('field.inc', 'dvtoolbox');
+  dvtoolbox_module_enable(array('addthis', 'addthis_displays'));
+  module_disable(array('seven'));
+  field_cache_clear();
+  $fields = _portales7_node_installed_fields();
+  $update_fields['portales7_social'] = $fields['portales7_social'];
+  dvtoolbox_field_create_fields($update_fields);
+  $instances = _portales7_node_installed_instances();
+  $update = array();
+  $update['portales7_node']['portales7_main_image'] = $instances['portales7_main_image'];
+  $update['portales7_node']['portales7_images'] = $instances['portales7_images'];
+  $update['portales7_node']['portales7_social'] = $instances['portales7_social'];
+  dvtoolbox_field_create_instances('node', $update);
+  module_load_include('node.inc', 'portales7_directory');
+  
+  $link = array(
+    'menu_name' => 'menu-panel-de-control',
+    'link_title' => 'Dashboard',
+    'link_path' => 'admin/dashboard',
+    'weight' => 49,
+  );
+  menu_link_save($link);
+  
+  module_load_include('node.inc', 'portales7_directory');
+  $fields = _portales7_directory_installed_fields();
+  $instances = _portales7_directory_installed_instances();
+  $update_fields['portales7_entity_facebook'] = $fields['portales7_entity_facebook'];
+  $update_fields['portales7_entity_twitter'] = $fields['portales7_entity_twitter'];
+  $update_fields['portales7_entity_other'] = $fields['portales7_entity_other'];
+  $update = array();
+  $update['portales7_entity']['portales7_entity_images'] = $instances['portales7_entity_images'];
+  $update['portales7_entity']['portales7_entity_logo'] = $instances['portales7_entity_logo'];
+  $update['portales7_entity']['portales7_entity_main_image'] = $instances['portales7_entity_main_image'];
+  $update['portales7_entity']['portales7_entity_facebook'] = $instances['portales7_entity_facebook'];
+  $update['portales7_entity']['portales7_entity_twitter'] = $instances['portales7_entity_twitter'];
+  $update['portales7_entity']['portales7_entity_other'] = $instances['portales7_entity_other'];
+  dvtoolbox_field_create_fields($update_fields);
+  dvtoolbox_field_create_instances('node', $update);
+  
+  module_load_include('field.inc', 'dvtoolbox');
+  module_load_include('node.inc', 'portales7_directory');
+  $groups = _portales7_directory_installed_field_groups();
+  $update_groups['portales7_entity']['form']['group_info'] = $instances['portales7_entity']['form']['group_info'];
+  $update_groups['portales7_entity']['default']['group_grup1'] = $instances['portales7_entity']['default']['group_grup1'];
+  dvtoolbox_field_create_groups('node', _portales7_directory_installed_field_groups());
+  
+  module_load_include('inc', 'portales7_profile', 'includes/eu_cookie_compliance');
+  portales7_profile_setup_eu_cookie_compliance();
+  module_load_include('profile', 'portales7_profile');
+  _portales7_profile_setup_imce();
+}
+
+
+function dvfixes_update_7406(){
+}
+/**
+ * Setup portales7_banner and portales7_entity permissions
+ */
+function dvfixes_update_7407(){
+  $new_perms = array(
+    'redactor' => array(
+      'create portales7_banner content',
+      'create portales7_entity content',
+      'delete any portales7_banner content',
+      'delete any portales7_entity content',
+      'delete own portales7_banner content',
+      'delete own portales7_entity content',
+      'edit any portales7_banner content',
+      'edit any portales7_entity content',
+      'edit own portales7_banner content',
+      'edit own portales7_entity content',
+    ),
+    'webmaster' => array(
+      'create portales7_banner content',
+      'create portales7_entity content',
+      'delete any portales7_banner content',
+      'delete any portales7_entity content',
+      'delete own portales7_banner content',
+      'delete own portales7_entity content',
+      'edit any portales7_banner content',
+      'edit any portales7_entity content',
+      'edit own portales7_banner content',
+      'edit own portales7_entity content',
+    ),
+  );
+  dvtoolbox_grant_permissions($new_perms);
+}
+
+function dvfixes_update_7408(){
+  module_load_include('inc', 'portales7_profile', 'includes/eu_cookie_compliance');
+  portales7_profile_setup_eu_cookie_compliance();
+}
+
+function dvfixes_update_7409(){
+  theme_disable(array('seven'));
+}
+
+function dvfixes_update_7410(){
+  module_load_include('field.inc', 'dvtoolbox');
+  module_load_include('node.inc', 'portales7_node');
+  $instances = _portales7_node_installed_instances();
+  $update = array();
+  $update['portales7_node']['portales7_main_image'] = $instances['portales7_main_image'];
+  dvtoolbox_field_create_instances('node', $update);
+  module_load_include('profile', 'portales7_profile');
+  _portales7_profile_setup_superfish();
+}

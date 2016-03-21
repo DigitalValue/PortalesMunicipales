@@ -1,0 +1,7 @@
+.dvgp {font-weight: bold; width: 100%;}
+.dvgp img, .dvgp-login img { vertical-align: middle; display: inline; max-height: 19px;}
+
+.dvgp-logged { padding: 4px; width: 100%; background-color: #9D0503; color: #FFFFFF;}
+.dvgp-logged a {color: #FFFFFF;}
+.dvgp-logged .link {float: right;}
+.dvgp-anon a{ color: #3B5998;}

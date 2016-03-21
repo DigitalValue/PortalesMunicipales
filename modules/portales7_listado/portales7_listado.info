@@ -1,0 +1,12 @@
+name = List Panes
+description = Provides custom panes for listings
+core = 7.x
+version = 0.3-dev
+package = Portales 7 by Digital Value, SL.
+dependencies[] = portales7_node
+dependencies[] = views
+dependencies[] = date_views
+dependencies[] = synonyms
+dependencies[] = dvtoolbox
+
+files[] = includes/P7ListController.inc

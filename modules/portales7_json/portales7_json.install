@@ -1,0 +1,13 @@
+<?php
+function portales7_json_install() {
+  $allowed_protocols = variable_get('filter_allowed_protocols', array('ftp', 'http', 'https', 'irc', 'mailto', 'news', 'nntp', 'rtsp', 'sftp', 'ssh', 'tel', 'telnet', 'webcal'));
+  $allowed_protocols[] = 'app';
+  variable_set('filter_allowed_protocols', $allowed_protocols);
+}
+
+/**
+ * Add support for app:// protocol
+ */
+function portales7_json_update_7001() {
+  portales7_json_install();
+}

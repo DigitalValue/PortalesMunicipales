@@ -1,0 +1,191 @@
+<?php
+function portales7_send_menu() {
+  $items['admin/portales7/send'] = array (
+    'title' => t('Send'),
+    'description' => t('Portales 7 Send Configuration page'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('portales7_send_send_page'),
+    'access arguments' => array('administer portales7'),
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['portales7-send'] = array(
+    'title' => t('Automated sendig'),
+    'page callback' => 'portales7_send_automated',
+    'access callback' => 'portales7_send_automated_check',
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+function portales7_send_automated_check(){
+  $token = variable_get('portales7_send_auth_token', '');
+  if (!empty($_GET['auth_token']) && $token === $_GET['auth_token']){
+    return TRUE;
+  }
+  return FALSE;
+}
+
+function portales7_send_automated(){
+  global $user;
+  if ($user->uid != 0){
+    drupal_set_message(t("This page is intended for automated sending, it can't be accessed using a browser"));
+    drupal_goto('admin/portales7/send');
+  }
+  $url = variable_get('portales7_send_url','');
+  if (empty($url)){
+    drupal_set_message(t("Sending pages has not been configured yet"));
+    drupal_goto('admin/portales7/send');
+  }
+  else {
+    _portales7_send_mail($url);
+  }
+}
+
+function portales7_send_send_page(&$form, &$form_state){
+  $form['url'] = array(
+    '#type' => 'textfield',
+    '#title' => t('URL'),
+    '#default_value' => variable_get('portales7_send_url', 'boletin'),
+    '#field_prefix' => url(NULL, array('absolute' => TRUE)) . (variable_get('clean_url', 0) ? '/' : '?q='),
+    '#description' => t('Send this page.'),
+    '#size' => 40,
+    '#required' => TRUE,
+  );
+  $form['subject'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Subject'),
+    '#default_value' => variable_get('portales7_send_subject', 'Boletín Besana'),
+    '#description' => t('This will be email subject.'),
+    '#required' => TRUE,
+  );
+  $form['destination'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Destination'),
+    '#default_value' => variable_get('portales7_send_destination', 'boletin@besana.es'),
+    '#description' => t('Send to this email address.'),
+    '#required' => TRUE,
+  );
+  $form['sender_name'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Sender Name'),
+    '#default_value' => variable_get('portales7_send_sender_name', 'Boletín Besana'),
+    '#description' => t('This will be the displayed sender name.'),
+    '#required' => TRUE,
+  );
+  $form['sender_address'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Sender Address'),
+    '#default_value' => variable_get('portales7_send_sender_address', 'boletin@besana.es'),
+    '#description' => t('This will be the displayed sender address and Return-Path address.'),
+    '#required' => TRUE,
+  );
+  $url = url(NULL, array('absolute' => TRUE)) . (variable_get('clean_url', 0) ? '/portales7-send?auth_token=' : '?q=portales7-send&auth_token=');
+  $token = variable_get('portales7_send_auth_token', md5(time()));
+  $form['token'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Remote send'),
+    '#default_value' => $token,
+    '#field_prefix' => $url,
+    '#description' => t('Use <b>!url</b> to schedule sending from a remote machine.', array('!url' => $url.$token)),
+    '#size' => 40,
+    '#required' => TRUE,
+  );
+  $form['save'] = array(
+    '#type' => 'submit',
+    '#value' => t('Save changes'),
+  );
+  $form['send'] = array(
+    '#type' => 'submit',
+    '#value' => t('Send now'),
+  );
+  return $form;
+}
+
+function portales7_send_send_page_validate($form, &$form_state) {
+  $url = $form_state['values']['url'];
+  if (!drupal_valid_path($url)){
+    form_set_error('url', t('The path @path didn\'t exists or is inaccessible.', array('@path' => $url)));
+  }
+  $destination = $form_state['values']['destination'];
+  if(!valid_email_address($destination)){
+    form_set_error('destination', t('Enter a valid email address.'));
+  }
+  $sender_address = $form_state['values']['sender_address'];
+  if(!valid_email_address($sender_address)){
+    form_set_error('sender_address', t('Enter a valid email address.'));
+  }
+}
+
+function portales7_send_send_page_submit($form, &$form_state){
+  $url = url(NULL, array('absolute' => TRUE)) . (variable_get('clean_url', 0) ? '/' : '?q=') . $form_state['values']['url'];
+  $subject = $form_state['values']['subject'];
+  $dest = $form_state['values']['destination'];
+  $sender_name = $form_state['values']['sender_name'];
+  $sender_address = $form_state['values']['sender_address'];
+  if ($form_state['values']['op'] == t('Send now')) {
+    if (_portales7_send_mail($url, array('destination' => $dest, 'sender_name' => $sender_name, 
+        'sender_address' => $sender_address, 'subject' => $subject))){
+      drupal_set_message(t('The page @page has been sent to @dest', array('@page' => $url, '@dest' => $dest)), 'status'); 
+    }
+    else {
+      drupal_set_message(t('Sending @page to @dest has failed', array('@page' => $url, '@dest' => $dest)), 'error');
+    } 
+  }
+  if ($form_state['values']['op'] == t('Save changes')){
+    variable_set('portales7_send_url', $form_state['values']['url']);
+    variable_set('portales7_send_destination', $subject);
+    variable_set('portales7_send_destination', $dest);
+    variable_set('portales7_send_sender_name', $sender_name);
+    variable_set('portales7_send_sender_address', $sender_address);
+    variable_set('portales7_send_auth_token', $form_state['values']['token']);
+    drupal_set_message(t('Changes has been saved.'),'status');
+  }
+}
+
+function _portales7_send_mail($url, $options = array()) {
+  $subject = empty($options['subject'])? variable_get('portales7_sender_subject', 'Boletín Besana') : $options['subject'];
+  $dest = empty($options['destination'])? variable_get('portales7_sender_destination', 'boletin@besana.es') : $options['destination']; 
+  $sender_name = empty($options['sender_name'])? variable_get('portales7_sender_sender_name', 'boletin@besana.es') : $options['sender_name'];
+  $sender_address = empty($options['sender_address'])? variable_get('portales7_sender_sender_address', 'boletin@besana.es') : $options['sender_address'];
+  
+ $content = file_get_contents($url);
+ $message = array(
+  'key' => 'boletin',
+  'headers' => array(
+    'Content-Type' => 'text/html',
+    //'From' => '',
+    'Sender' => 'Portal Besana',
+    'Return-Path' => $sender_address,
+    'X-Mailer' => 'Portales 7 for Drupal',
+    ),
+  'to' => $dest,
+  'from' => sprintf('%s <%s>', $sender_name, $sender_address),
+  'body' => $content,
+  'subject' => $subject,
+  'params' => array(),
+ );
+ 
+ $message['headers']['From'] = $message['from'];
+  $message = mimemail_prepare_message($message);
+  //dsm($message, __FUNCTION__);
+  
+   if (drupal_mail_system('portales7_send', 'boletin')->mail($message)) {
+     watchdog('portales7_send', 'Page @page has been sent to @dest', array('@page' => $url, '@dest' => $message['to']));
+     return TRUE;
+   }
+   else {
+     watchdog('portales7_send', 'Sending @page to @dest has failed', array('@page' => $url, '@dest' => $message['to']), WATCHDOG_ERROR);
+     return FALSE;
+   }
+}
+
+/**
+* Implementation of hook_ctools_plugin_dierctory() to let the system know
+* where our content_type plugins are.
+*/
+function portales7_send_ctools_plugin_directory($module, $plugin) {
+    if ($module == 'ctools') {
+        return 'plugins/' . $plugin;
+    }
+}
+

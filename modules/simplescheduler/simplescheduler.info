@@ -1,0 +1,6 @@
+name = Simple Scheduler
+description = Provides a simplified scheduler
+package = by Digital Value, SL
+core = 7.x
+dependencies[] = node
+dependencies[] = date_popup

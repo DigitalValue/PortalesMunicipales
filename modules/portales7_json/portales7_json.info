@@ -1,0 +1,10 @@
+name = Portales 7 JSON 
+description = Provides json listings
+core = 7.x
+version = 0.1-dev
+package = Portales 7 by Digital Value, SL.
+dependencies[] = portales7_listado
+dependencies[] = views_json
+
+
+ 

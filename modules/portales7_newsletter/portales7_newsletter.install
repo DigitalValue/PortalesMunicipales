@@ -1,0 +1,39 @@
+<?php
+function portales7_newsletter_schema(){
+  return array(
+    'portales7_newsletter_custom' => array(
+    'description' => 'The table for customized content used on newsletters',
+      'fields' => array(
+        'id' => array('type' => 'serial', 'size' => 'normal','unsigned' => TRUE, 'not null' => TRUE),
+        'uid' => array('type' => 'int', 'size' => 'normal', 'unsigned' => TRUE, 'not null' => TRUE),
+        'status' => array('type' => 'int', 'size' => 'tiny', 'unsigned' => TRUE, 'not null' => TRUE, 'default' => 0),
+        'timestamp' => array('type' => 'int', 'size' => 'big', 'not null' => TRUE, 'default' => 0),
+        'content' => array('type'=>'text', 'size' => 'normal', 'not null' => TRUE),
+      ),
+      'primary key' => array('id'),
+      'indexes' => array(
+        'status' => array('status'),
+        'uid' => array('uid'),
+      ),
+    ),
+    'portales7_newsletters' => array(
+      'description' => 'The table where newsletters are stored',
+      'fields' => array(
+        'id' => array('type' => 'serial', 'size' => 'normal', 'unsigned' => TRUE, 'not null' => TRUE),
+        'uid' => array('type' => 'int', 'size' => 'normal', 'unsigned' => TRUE, 'not null' => TRUE),
+        'status' => array('type' => 'int', 'size' => 'tiny', 'unsigned' => TRUE, 'not null' => TRUE, 'default' => 0),
+        'subject' => array('type' => 'varchar', 'length' => '1024', 'not null' => TRUE, 'default' => ''),
+        'recipients' => array('type' => 'varchar', 'length' => '2048', 'not null' => TRUE, 'default' => ''),
+        'timestamp' => array('type' => 'int', 'size' => 'big', 'not null' => TRUE, 'default' => 0),
+        'content' => array('type'=>'text', 'size' => 'medium', 'not null' => TRUE), 
+      ),
+      'primary key' => array('id'),
+      'indexes' => array(
+        'status' => array('status'),
+        'uid' => array('uid'),
+        'subject' => array('subject'),
+        'recipients' => array('recipients'),
+      ),
+    ),
+  );
+}

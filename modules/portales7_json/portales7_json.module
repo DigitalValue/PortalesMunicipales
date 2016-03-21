@@ -1,0 +1,151 @@
+<?php
+define('PORTALES7_API_VERSION', '7.5.1');
+
+function portales7_json_menu() {
+  $items = array();
+  $items['portales7/json'] = array(
+    'title' => 'JSON',
+    'description' => 'JSON listings page',
+    'access arguments' => array('access content'),
+    'page callback' => 'portales7_json_listado',
+    'type' => MENU_CALLBACK,
+    'file' => 'includes/listados.inc',
+  );
+  
+  $items['node/%node/json'] = array(
+    'title' => 'JSON',
+    'description' => 'JSON view for nodes',
+    'page callback' => 'portales7_json_node',
+    'page arguments' => array(1),
+    'access callback' => 'node_access',
+    'access arguments' => array('view', 1),
+    'weight' => 0,
+    'type' => MENU_CALLBACK,
+    'file' => 'includes/listados.inc',
+  );
+  $items['portales7/json-raw'] = array(
+    'title' => 'JSON raw',
+    'page callback' => 'portales7_json_raw',
+    'file' => 'includes/raw.inc',
+    'type' => MENU_CALLBACK,
+    'access arguments' => array('access content'),
+  );
+  $items['portales7/json-processed'] = array(
+    'title' => 'JSON processed',
+    'page callback' => 'portales7_json_processed',
+    'file' => 'includes/processed.inc',
+    'type' => MENU_CALLBACK,
+    'access arguments' => array('access content'),
+  );
+  $items['portales7/json-menu'] = array(
+    'title' => 'JSON Menu',
+    'page callback' => 'portales7_json_menu_json',
+    'file' => 'includes/menu.inc',
+    'type' => MENU_CALLBACK,
+    'access arguments' => array('access content'),
+  );
+  $items['portales7/json-quicklinks'] = array(
+    'title' => 'JSON Quicklikns',
+    'page callback' => 'portales7_json_quicklinks',
+    'file' => 'includes/menu.inc',
+    'type' => MENU_CALLBACK,
+    'access arguments' => array('access content'),
+  );
+  $items['portales7/json-variables'] = array(
+    'title' => 'Export variables by json',
+    'access arguments' => array('access content'),
+    'page callback' => '_portales_municipales_json_variable',
+    'file' => 'includes/menu.inc',
+    'type' => MENU_CALLBACK,
+  );
+  $items['admin/dashboard/portales7/json-quicklinks'] = array(
+    'title' => 'JSON Quicklinks',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('portales7_json_quicklinks_admin'),
+    'type' => MENU_LOCAL_TASK,
+    'access arguments' => array('administer portales7'),
+    'file' => 'includes/menu.inc',
+  );
+  return $items;
+}
+
+function _portales7_json_get_node($node) {
+  module_load_include('inc', 'portales7_json', 'includes/process');
+  if (function_exists('_portales7_json_get_' . $node->type)) {
+    return call_user_func('_portales7_json_get_' . $node->type, $node);
+  }
+  return NULL;
+}
+
+function _portales7_json_get_taxonomy_fields($entity_type = 'node', $bundle = 'portales7_node', $reset = TRUE) {
+  return _portales7_json_get_fields_by_type($entity_type, $bundle, 'taxonomy_term_reference', $reset);
+}
+
+
+function _portales7_json_get_fields_by_type($entity_type, $bundle, $type, $reset = FALSE) {
+  if (empty($entity_type) || empty($bundle) || empty($type)) {
+    watchdog('Portales7 JSON', 'Insuficient parameters on @function', array('@function' => __FUNCTION__), WATCHDOG_ERROR);
+    return NULL;
+  }
+  $fields = &drupal_static(__FUNCTION__);
+  if ($reset || empty($fields[$entity_type][$bundle][$type])) {
+    $query = array(
+      'type' => $type,
+      'entity_type' => $entity_type,
+      'bundle' => $bundle,
+    );
+    $fields[$entity_type][$bundle][$type] = field_read_fields($query);
+  }
+  return $fields[$entity_type][$bundle][$type];
+}
+
+function portales7_json_cron() {
+  $clear = variable_get('portales7_json_clear', 0);
+  if (($_SERVER['REQUEST_TIME'] - $clear) < 900) return;
+  $max_updated = (db_query('select max(changed) as changed from {node}')->fetchField());
+  if (($max_updated -  $clear) > 0) {
+    portales7_json_clear_cached_nodes();
+  }
+}
+
+function portales7_json_entity_delete($entity, $entity_type) {
+  portales7_json_entity_update($entity, $entity_type);
+}
+
+function portales7_json_entity_update($entity, $entity_type) {
+  $clear = variable_get('portales7_json_clear', 0);
+  if (($_SERVER['REQUEST_TIME'] -  $clear) > 3600) {
+    portales7_json_clear_cached_nodes();
+  }
+}
+
+function portales7_json_clear_cached_nodes() {
+  cache_clear_all('pm_json', 'cache', TRUE);
+  variable_set('portales7_json_clear', $_SERVER['REQUEST_TIME']);
+  watchdog('pm_json', 'Cleaning cache from cron task', NULL, WATCHDOG_INFO);
+  module_load_include('inc', 'portales7_json', 'includes/raw');
+  _portales7_json_raw_prefetch();
+}
+
+function portales7_json_action_info() {
+  return array(
+    'portales7_json_json_raw_action' => array(
+      'type' => 'node',
+      'label' => t('Export using json raw'),
+      'configurable' => FALSE,
+      'vbo_configurable' => FALSE,
+      'aggregate' => TRUE,
+      'permissions' => array('access content')
+    ),
+  );
+}
+
+function portales7_json_json_raw_action(&$entity, $context) {
+  drupal_add_http_header('Content-type', 'application/json');
+  drupal_add_http_header('Content-disposition', 'attachment;filename=default-nodes.json');
+  module_load_include('inc', 'portales7_json', 'includes/raw');
+  $entities = array();
+  portales7_json_entity_recurse('node', $entity, $entities, 3);
+  print json_encode(array('nodes' => $entities));
+  exit;
+}

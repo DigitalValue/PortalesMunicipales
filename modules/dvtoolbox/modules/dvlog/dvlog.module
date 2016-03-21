@@ -1,0 +1,69 @@
+<?php
+/**
+ * Implements hook_menu().
+ */
+function dvlog_menu() {
+  $items['admin/config/system/dvlog'] = array(
+    'title' => 'Configure dvLog',
+    'page callback' => 'dvlog_admin',
+    'file' => 'dvlog.admin.inc',
+    'access argument' => 'configure dvlog',
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function dvlog_permission() {
+  return array(
+    'configure dvlog' => array(
+      'title' => 'Configure dvLog',
+      'restrict access' => TRUE,
+    ),
+  );
+}
+
+/**
+ * Implements hook_node_insert().
+ */
+function dvlog_entity_insert($entity, $type) {
+  _dvlog_write_record('insert', $type, $entity);
+}
+/**
+ * Implements hook_entity_update().
+ */
+function dvlog_entity_update($entity, $type) {
+  _dvlog_write_record('update', $type, $entity);
+}
+
+/**
+ * Implements hook_entity_delete().
+ */
+function dvlog_entity_delete($entity, $type) {
+  _dvlog_write_record('delete', $type, $entity);
+}
+ 
+function _dvlog_write_record($action, $type, $entity, $data = '') {
+  global $user;
+  $record = array(
+    'site' => variable_get('dvlog_site', conf_path()),
+    'date' => $_SERVER['REQUEST_TIME'],
+    'uid' => $user->uid,
+    'action' => $action,
+    'type' => $type,
+    'data' => $data,
+    'object' => json_encode(entity_extract_ids($type, $entity)),
+  );
+  //dpm($record, __FUNCTION__);
+  try {
+  Database::addConnectionInfo('dvlogDatabase', 'default', variable_get('dvlog_database', array()));
+  db_set_active('dvlogDatabase');
+  db_insert('dvlog')->fields($record)->execute();
+  //db_query("insert into {dvlog} (site, date,uid, action, type, data) values (:site, :date, :uid, :action, :type, :data)", $record);
+  }
+  catch (Exception $e) {
+    drupal_set_message($e->getMessage(), 'error');
+  }
+  db_set_active();
+}

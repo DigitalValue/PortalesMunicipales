@@ -1,0 +1,6 @@
+<?php
+function pdf2images_install() {
+  variable_set('imagemagick_convert', 'convert');
+  variable_set('imagemagick_debug', 0);
+  variable_set('imagemagick_quality', '85');
+}

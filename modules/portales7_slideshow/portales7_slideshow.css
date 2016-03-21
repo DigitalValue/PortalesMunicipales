@@ -1,0 +1,6 @@
+.portales7_slideshow .portales7_slideshow-slide { position: relative;}
+.portales7_slideshow .portales7_slideshow-bottom {position: absolute; bottom: 0; left:0; right:0; color:#fff; background:transparent url('images/1x1-70.png'); padding: 5px;}
+.portales7_slideshow .portales7_slideshow-field-title { font-weight: bold;  }
+.portales7_slideshow .portales7_slideshow-field-count { color: #ccc; text-align: right;}
+.portales7_slideshow-controls { margin-top: 5px; padding:0;}
+.portales7_slideshow-controls li { display: inline;}

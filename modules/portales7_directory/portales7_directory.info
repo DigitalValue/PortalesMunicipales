@@ -1,0 +1,35 @@
+name = Portales 7 Directory
+description = Provides the content type for Portales 7 Directory
+core = 7.x
+version = 5.x-dev
+package = Portales 7 by Digital Value, SL.
+dependencies[] = portales7
+dependencies[] = portales7_node
+dependencies[] = field_group
+dependencies[] = file
+dependencies[] = image
+dependencies[] = options
+dependencies[] = list
+dependencies[] = text
+dependencies[] = taxonomy
+dependencies[] = field
+dependencies[] = filter
+dependencies[] = number
+dependencies[] = path
+dependencies[] = date
+dependencies[] = video
+dependencies[] = date_popup
+dependencies[] = date_all_day
+dependencies[] = date_tools
+dependencies[] = term_reference_tree
+dependencies[] = simplescheduler
+dependencies[] = addressfield
+dependencies[] = dvtoolbox
+dependencies[] = field_collection
+dependencies[] = geocoder
+dependencies[] = geofield
+dependencies[] = geophp
+dependencies[] = simple_gmap
+dependencies[] = title
+
+

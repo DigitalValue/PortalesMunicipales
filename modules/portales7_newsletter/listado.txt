@@ -1,0 +1,63 @@
+<!--PLANTILLA INICIO-->
+			<table cellpadding='0' align="center" style="border-collapse: collapse;">
+				<tr id="first-row">
+					<td id="header" align="center" colspan='3' style="">
+						<img src="<?php print file_create_url(drupal_get_path("module","portales7_newsletter"). "/images/cabecera_area.jpg");?>" style="display:block;"></img>
+					</td>
+				</tr>
+			</table>
+
+			<table class="sombra" cellpadding='0' align="center" style="border-collapse: collapse;margin-bottom:10px;">
+				<td>
+					<img src="<?php print file_create_url(drupal_get_path("module","portales7_newsletter"). "/images/sombra-1.jpg");?>" style="display:block;"></img>
+				</td>
+			</table>
+
+			<table cellpadding='0' align="center" style="border-collapse: collapse;">
+				<tr id="destacado">
+					<td id="header" align="center" colspan='3' width="650px">
+						<ul id="sortable1" style="background-color: #CACACA;padding:0;" class="content-pane sortable news-col-head destacado"><div class="drag-icon"><img class="drag-image" src="<?php print file_create_url(drupal_get_path("module","portales7_newsletter"). "/images/icono_desplazamiento.png");?>" style="display:block;margin-top: 10px;"><span class="under-drag">Arrastrar contenido dentro.</span></img></div></ul>
+					</td>
+				</tr>
+			</table>
+
+			<table class="sombra" cellpadding='0' align="center" style="border-collapse: collapse;margin-bottom:10px;">
+				<td>
+					<img src="<?php print file_create_url(drupal_get_path("module","portales7_newsletter"). "/images/sombra-1.jpg");?>" style="display:block;"></img>
+				</td>
+			</table>			
+
+			<table cellpadding='0' align="center" style="border-collapse: collapse;">
+				<tr>
+					<td id="tc-left-col" align="center" width="215px" style="border-right: solid 2px lightgrey;background-color:white;">
+						<ul id="sortable2" style="background-color: #CACACA;padding:0;" class="content-pane sortable news-col-tres"><div class="drag-icon"><img class="drag-image" src="<?php print file_create_url(drupal_get_path("module","portales7_newsletter"). "/images/icono_desplazamiento.png");?>" style="display:block;margin-top: 10px;"><span class="under-drag">Arrastrar contenido dentro.</span></img></div></ul>
+					</td>
+					<td id="tc-centre-col" align="center" width="215px" style="border-right: solid 2px lightgrey;border-left: solid 2px lightgrey;background-color:white;">
+						<ul id="sortable3" style="background-color: #CACACA;padding:0;" class="content-pane sortable news-col-tres"><div class="drag-icon"><img class="drag-image" src="<?php print file_create_url(drupal_get_path("module","portales7_newsletter"). "/images/icono_desplazamiento.png");?>" style="display:block;margin-top: 10px;"><span class="under-drag">Arrastrar contenido dentro.</span></img></div></ul>
+					</td>
+					<td id="tc-right-col" align="center" width="215px" style="border-left: solid 2px lightgrey;background-color:white;">
+						<ul id="sortable4" style="background-color: #CACACA;padding:0;" class="content-pane sortable news-col-tres"><div class="drag-icon"><img class="drag-image" src="<?php print file_create_url(drupal_get_path("module","portales7_newsletter"). "/images/icono_desplazamiento.png");?>" style="display:block;margin-top: 10px;"><span class="under-drag">Arrastrar contenido dentro.</span></img></div></ul>
+					</td>
+				</tr>
+			</table>
+
+			<table class="sombra" cellpadding='0' align="center" style="border-collapse: collapse;margin-bottom:10px;">
+				<td>
+					<img src="<?php print file_create_url(drupal_get_path("module","portales7_newsletter"). "/images/sombra-1.jpg");?>" style="display:block;"></img>
+				</td>
+			</table>
+
+			<table cellpadding='0' align="center" style="border-collapse: collapse;">
+				<tr id="footer">
+					<td id="header" align="center" colspan='3' width="650px">
+						<ul id="sortable5" style="background-color: #CACACA;padding:0;" class="content-pane sortable news-col-head destacado"><div class="drag-icon"><img class="drag-image" src="<?php print file_create_url(drupal_get_path("module","portales7_newsletter"). "/images/icono_desplazamiento.png");?>" style="display:block;margin-top: 10px;"><span class="under-drag">Arrastrar contenido dentro.</span></img></div></ul>
+					</td>
+				</tr>
+			</table>
+
+			<table class="sombra" cellpadding='0' align="center" style="border-collapse: collapse;margin-bottom:10px;">
+				<td>
+					<img src="<?php print file_create_url(drupal_get_path("module","portales7_newsletter"). "/images/sombra-1.jpg");?>" style="display:block;"></img>
+				</td>
+			</table>
+<!--PLANTILLA FIN-->

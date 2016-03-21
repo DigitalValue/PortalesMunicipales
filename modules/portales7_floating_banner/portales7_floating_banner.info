@@ -1,0 +1,4 @@
+name = Floating Banner 
+description = Floating banner module for Portales 7
+core = 7.x
+package = Portales 7 by Digital Value, SL.

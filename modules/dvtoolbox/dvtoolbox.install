@@ -1,0 +1,82 @@
+<?php
+/**
+ * @file
+ * .install file for dvtoolbox module
+ */
+
+/**
+ * Implements hook_install().
+ */
+function dvtoolbox_install() {
+  $item = array(
+    'menu_name' => 'shortcut-set-1',
+    'link_title' => 'Limpiar caché',
+    'link_path' => 'admin/dvtoolbox/cache',
+    'attributes' => array(),
+    'customized' => 1,
+  );
+  menu_link_save($item);
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function dvtoolbox_uninstall() {
+  menu_link_delete(NULL, 'admin/dvtoolbox/cache');
+}
+
+/**
+ * Install schema for data storage
+ * Give permission 'dvtoolbox use data storage' to authenticated users
+ */
+function dvtoolbox_update_7001() {
+  drupal_install_schema('dvtoolbox');
+  user_role_grant_permissions(DRUPAL_AUTHENTICATED_RID, array('dvtoolbox use data storage'));
+}
+
+/**
+ * Implements hook_schema().
+ */
+function dvtoolbox_schema() {
+  $tables = array();
+  $tables['dvtoolbox_datastorage'] = array(
+    'description' => 'A table to store user data',
+    'fields' => array(
+      'uid' => array(
+        'description' => 'The identifier for user who owns the data',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'name' => array(
+        'description' => 'The key of the data',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ),
+      'value' => array(
+        'description' => 'The data',
+        'type' => 'blob',
+        'not null' => TRUE,
+      ),
+    ),
+    'primary key' => array('uid', 'name'),
+  );
+  return $tables;
+}
+
+
+/**
+ * Fixes clear cache shortcut link
+ */
+function dvtoolbox_update_7400(){
+  db_delete('menu_links')->condition('menu_name', 'shorcut-set-1')->condition('link_path', 'admin/dvtoolbox/cache')->execute();
+  $item = array(
+    'menu_name' => 'shortcut-set-1',
+    'link_title' => 'Limpiar caché',
+    'link_path' => 'admin/dvtoolbox/cache',
+    'attributes' => array(),
+    'customized' => 1,
+  );
+  menu_link_save($item);
+}

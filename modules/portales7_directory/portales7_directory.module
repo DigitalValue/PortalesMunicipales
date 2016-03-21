@@ -1,0 +1,99 @@
+<?php
+
+
+/**
+ * Implements hook_entity_info
+ */
+
+/**
+ * Implements hook_node_info()
+ */
+function portales7_directory_node_info() {
+  module_load_include('node.inc', 'portales7_directory');
+  return _portales7_directory_node_info();
+}
+
+
+/**
+ * Implements hook_node_type_insert().
+ */
+function portales7_directory_node_type_insert($content_type) {
+  if ($content_type->type == 'portales7_entity') {
+    module_load_include('node.inc', 'portales7_directory');
+    return _portales7_directory_node_type_insert($content_type);
+  }
+}
+
+
+/**
+ * Implement hook_ctools_plugin_api().
+ */
+function portales7_directory_ctools_plugin_api($module, $api) {
+  return array('version' => 1);
+}
+
+/**
+ * Implements hook_entity_info_alter().
+ *
+ * We need to modify the default node entity info by adding a new view mode to
+ * be used in functions like node_view() or node_build_content().
+ */
+/*function portales7_directory_entity_info_alter(&$entity_info) {
+  // Add our new view mode to the list of view modes...
+  $filename = dirname(__FILE__) . '/portales7_entity.view_modes.inc';
+  $view_modes = array();
+  if (file_exists($filename)) {
+    include($filename);
+    foreach ($view_modes as $k => $v) {
+      $v['custom settings'] = FALSE;
+      $entity_info['node']['view modes'][$k] = $v;
+    } 
+  }
+}*/
+
+function portales7_directory_ds_view_modes_info() {
+  module_load_include('node.inc', 'portales7_directory');
+  $vms = portales7_directory_default_view_modes();
+  $ds_view_modes = array();
+  foreach ($vms as $k => $vm) {
+    $ds_view_modes[$k] = (object) array(
+      'disabled' => FALSE,
+      'api_version' => 1,
+      'view_mode' => $k,
+      'label' => $vm['label'],
+      'entities' => array ('node' => 'node'),
+    );
+  }
+  module_load_include('fc.inc', 'portales7_directory');
+  $vms = _portales7_directory_fc_view_modes();
+  foreach ($vms as $f => $data) {
+    foreach ($data as $k => $vm) {
+      if (empty($ds_view_modes[$k])) {
+        $ds_view_modes[$k] = (object) array(
+          'disabled' => FALSE,
+          'api_version' => 1,
+          'view_mode' => $k,
+          'label' => $vm['label'],
+          'entities' => array ('field_collection_item' => 'field_collection_item'),
+        );
+      }
+      else {
+        $ds_view_modes[$k]->entities['field_collection_item'] = 'field_collection_item';
+      }
+    }
+  }
+  return $ds_view_modes;
+}
+
+/**
+ * Implements hook_node_presave();
+ */
+function portales7_directory_node_presave($node) {
+  if ($node->type != 'portales7_entity') return;
+  foreach($node->portales7_entity_postaladdress['und'] as $delta => $item) {
+    if (empty($item['thoroughfare']) && empty($item['locality'])) {
+      unset($node->portales7_entity_postaladdress['und'][$delta]);
+      unset($node->portales7_entity_geofield['und'][$delta]);
+    }
+  }
+}

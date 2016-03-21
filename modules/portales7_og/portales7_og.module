@@ -1,0 +1,139 @@
+<?php
+/**
+ * @file this is the module file for Portales 7: Miniportales
+ * module.
+ * @author Juanjo Garcia <juanjo@digitalvalue.es>
+ */
+
+/**
+ * Implements hook_node_info()
+ */
+
+function portales7_og_node_info(){
+  return array(
+    'portales7_group' => array (
+      'type' => 'portales7_group',
+      'name' => 'Portales 7 Miniportal',
+      'base' => 'node_content',
+      'description' => 'This is the group content type for Portales 7.',
+      'has_title' => 1,
+      'title_label' => 'Title',
+      'custom' => TRUE,
+      'locked' => 1,
+      'enabled' => 1,
+    ),
+  );
+}
+
+/**
+ * Implements hook_node_type_insert().
+ */
+function portales7_og_node_type_insert($content_type) {
+  if ($content_type->type != 'portales7_group') return;
+  ctools_include('export');
+  module_load_include('node.inc', 'portales7_og');
+  module_load_include('field.inc', 'dvtoolbox');
+
+  dvtoolbox_field_create_fields(_portales7_og_installed_fields());
+  field_info_cache_clear();
+  dvtoolbox_field_create_instances('node', _portales7_og_installed_instances());
+  //Set content type options
+  variable_set('node_options_' . $content_type->type, array('status'));
+  variable_set('node_submitted_' . $content_type->type, FALSE);
+  
+  //Configure type for save_edit
+  $se_types = variable_get('save_edit_node_types', array());
+  $se_types['portales7_group'] = 'portales7_group';
+  variable_set('save_edit_node_types', $se_types);
+  
+  //Add a shorcut
+  $link = array(
+    'menu_name' => 'shortcut-set-1',
+    'link_title' => 'Add group',
+    'link_path' => 'node/add/portales7-group',
+    'weight' => 99,
+  );
+  menu_link_save($link);
+}
+ 
+/**
+ * Implements hook_ctools_plugin_directory().
+ */
+function portales7_og_ctools_plugin_directory($module, $plugin) {
+  if ($module == 'ctools' && !empty($plugin)) {
+    return "plugins/$plugin";
+  }
+}
+
+
+/**
+ * Provides a group by path
+ * @param $path Path to check for
+ * @param $reset Get info from database instead of cache
+ * @return group data
+ */
+function portales7_og_group_by_path($path, $reset = FALSE) {
+  static $groups = array();
+  if (empty($groups[$path])) {
+      $query = db_select('purl', 'p')
+      ->fields('p', array('id'))
+      ->condition('value', $path);
+      $res = $query->execute()->fetch();
+      $groups[$path] = node_load($res->id);
+  }
+  return $groups[$path];
+}
+
+function portales7_og_available_groups($reset = FALSE) {
+  static $groups;
+  if ($reset || empty($groups)){
+    $groups = array();
+    foreach(og_get_all_group() as $gid){
+      $group = node_load($gid);
+      $groups[$group->nid] = $group->title;
+    }
+  }
+  return $groups;
+}
+
+function portales7_og_add_og_filter(&$handler, $gid) {
+  if ($gid == 'url' && $context = og_context()) $gid = $context['gid'];
+  if (!is_numeric($gid)) return;
+
+  /* Relación: OG membership: OG membership from Nodo */
+  $handler->display->display_options['relationships']['og_membership_rel']['id'] = 'og_membership_rel';
+  $handler->display->display_options['relationships']['og_membership_rel']['table'] = 'node';
+  $handler->display->display_options['relationships']['og_membership_rel']['field'] = 'og_membership_rel';
+  
+  /* Criterios de filtrado: OG membership: Group ID */
+  $handler->display->display_options['filters']['gid']['id'] = 'gid';
+  $handler->display->display_options['filters']['gid']['table'] = 'og_membership';
+  $handler->display->display_options['filters']['gid']['field'] = 'gid';
+  $handler->display->display_options['filters']['gid']['relationship'] = 'og_membership_rel';
+  $handler->display->display_options['filters']['gid']['value']['value'] = $gid;
+  
+  /* Criterios de filtrado: OG membership: Group_type */
+  $handler->display->display_options['filters']['group_type']['id'] = 'group_type';
+  $handler->display->display_options['filters']['group_type']['table'] = 'og_membership';
+  $handler->display->display_options['filters']['group_type']['field'] = 'group_type';
+  $handler->display->display_options['filters']['group_type']['relationship'] = 'og_membership_rel';
+  $handler->display->display_options['filters']['group_type']['value'] = array(
+    'node' => 'node',
+  );
+}
+
+function portales7_og_language_switch_links_alter(&$result, &$type, &$path) {
+  global $language;
+  if ($cache = purl_active()) {
+    $providers = $cache->get();
+    if (!empty($providers['path'][0]->value)) {
+      foreach($result as &$v) {
+        $v['href'] = $providers['path'][0]->value  . '/' . $v['href'];
+      }
+    }
+    if ($path == $_GET['q']) {
+      $result[$language->language]['attributes']['class'][] = 'active';
+    }
+  }
+}
+

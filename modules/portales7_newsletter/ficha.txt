@@ -1,0 +1,14 @@
+<!--PLANTILLA INICIO-->
+			<table cellpadding='0' align="center" style="border-collapse: collapse;">
+				<tr id="first-row">
+					<td id="header" align="center" colspan='3'>
+						<img src="<?php print file_create_url(drupal_get_path("module","portales7_newsletter"). "/images/cabecera-cclb-listado.png");?>" style="display:block;"></img>
+					</td>
+				</tr>
+				<tr id="destacado">
+					<td id="header" align="center" colspan='3' width="650px">
+						<ul id="sortable1" style="background-color: #CACACA;padding:0;" class="content-pane sortable news-col-head"><div class="drag-icon"><img class="drag-image" src="<?php print file_create_url(drupal_get_path("module","portales7_newsletter"). "/images/icono_desplazamiento.png");?>" style="display:block;margin-top: 10px;"><span class="under-drag">Arrastrar contenido dentro.</span></img></div></ul>
+					</td>
+				</tr>
+			</table>
+<!--PLANTILLA FIN-->

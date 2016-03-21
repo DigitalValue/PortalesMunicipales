@@ -1,0 +1,7 @@
+name = Web Accessibility Initiative
+description = WAI Version toggle for Portales 7
+core = 7.x
+version = 0.1
+package = Portales 7 by Digital Value, SL.
+
+dependencies[] = ctools

@@ -1,0 +1,20 @@
+<?php
+function dvfb_requirements($phase) {
+  $output = array();
+  if ($phase != 'runtime') return $output;
+  $missing = array();
+  if (variable_get('dvfb_appid', '') === '') {
+    $missing[] = t('Facebook app');
+  }
+  if (!empty($missing)) {
+    $t = get_t();
+    $output['dvfb'] = array(
+      'title' => $t('DV Facebook'),
+      'value' => $profile['version'],
+      'description' => $t('Facebook app is not configured. Please configure them !link', array('!link' => l($t('here'), 'admin/config/jsapp/dvfb'))),
+      'severity' => REQUIREMENT_WARNING,
+    );
+    drupal_set_message($output['dvfb']['description'], 'error');
+  }
+  return $output;
+}

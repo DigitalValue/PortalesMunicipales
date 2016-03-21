@@ -1,0 +1,138 @@
+<?php
+function portales7_newsletter_menu() {
+  $items = array();
+  $items['admin/portales7/newsletter/add'] = array(
+    'title' => 'Create newsletter',
+    'type' => MENU_LOCAL_TASK,
+    'page callback' => 'portales7_newsletter_generator',
+    'access arguments' => array('create portales7 newsletter'),
+    'file' => 'portales7_newsletter.pages.inc',
+    'delivery callback' => 'portales7_newsletter_generator_deliver',
+  );
+  $items['admin/portales7/newsletter'] = array(
+    'title' => 'Newsletters',
+    'description' => 'List existing newsletters',
+    'access arguments' => array('manage portales7 newsletters'),
+    'file' => 'portales7_newsletter.admin.inc',
+    'page callback' => 'portales7_newsletter_list',
+    'type' => MENU_LOCAL_TASK,
+  );
+  /*$items['admin/portales7/newsletter/list'] = array(
+    'title' => 'Newsletters',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+  );*/
+  $items['portales7/newsletter/save'] = array(
+    'title' => 'Save Newsletter',
+    'type' => MENU_CALLBACK,
+    'file' => 'portales7_newsletter.admin.inc',
+    'page callback' => 'portales7_newsletter_save',
+    'page arguments' => array(3),
+    'access arguments' => array('create portales7 newsletter'),
+  );
+  $items['portales7/newsletter/%newsletter'] = array(
+    'title' => 'Newsletter',
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'portales7_newsletter.pages.inc',
+    'page callback' => 'portales7_newsletter_view',
+    'page arguments' => array(2),
+    'access arguments' => array('access content'),
+    'delivery callback' => 'portales7_newsletter_view_deliver',
+  );
+  $items['portales7/newsletter/%newsletter/clone'] = array(
+    'title' => 'Newsletter',
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'portales7_newsletter.pages.inc',
+    'page callback' => 'portales7_newsletter_generator',
+    'page arguments' => array(2),
+    'access arguments' => array('access content'),
+    //'delivery callback' => 'portales7_newsletter_generator_deliver',
+  );
+  $items['portales7/newsletter/custom/save'] = array(
+    'title' => 'Save customized element',
+    'type' => MENU_CALLBACK,
+    'file' => 'portales7_newsletter.admin.inc',
+    'page callback' => 'portales7_newsletter_custom_save',
+    //'access arguments' => array('create portales7 newsletter'),
+    'access arguments' => array('access content'),
+  );
+  $items['portales7/newsletter/custom/get'] = array(
+    'title' => 'Get customized elements',
+    'type' => MENU_CALLBACK,
+    'file' => 'portales7_newsletter.admin.inc',
+    'page callback' => 'portales7_newsletter_custom_get',
+    //'access arguments' => array('create portales7 newsletter'),
+    'access arguments' => array('access content'),
+  );
+  
+  $items['portales7/newsletter/custom/delete'] = array(
+    'title' => 'Delete customized elements',
+    'type' => MENU_CALLBACK,
+    'file' => 'portales7_newsletter.admin.inc',
+    'page callback' => 'portales7_newsletter_custom_delete',
+    'page arguments' => array(4),
+    //'access arguments' => array('create portales7 newsletter'),
+    'access arguments' => array('access content'),
+  );
+  
+    $items['portales7/newsletter/delete'] = array(
+    'title' => 'Delete newsletter',
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'portales7_newsletter.admin.inc',
+    'page callback' => 'portales7_newsletter_delete',
+    'page arguments' => array(3),
+    //'access arguments' => array('create portales7 newsletter'),
+    'access arguments' => array('access content'),
+  );
+  
+  return $items;
+}
+
+function newsletter_load($id) {
+  return db_select('portales7_newsletters', 'p7n')->fields('p7n', array())->condition('id', $id)->execute()->fetch();
+}
+
+function portales7_newsletter_permission() {
+  return array(
+    'manage portales7 newsletters' => array('title' => t('Manage Portales7 Newsletters')),
+    'create portales7 newsletter' => array('title' => t('Create Portales7 Newsletters')),
+  );
+}
+
+function portales7_newsletter_generator_deliver($page_callback_result) {
+  if (isset($page_callback_result) && is_null(drupal_get_http_header('Content-Type'))) {
+    drupal_add_http_header('Content-Type', 'text/html; charset=utf-8');
+  }
+  print $page_callback_result;
+}
+
+function portales7_newsletter_json_deliver($page_callback_result) {
+  if (isset($page_callback_result) && is_null(drupal_get_http_header('Content-Type'))) {
+    drupal_add_http_header('Content-Type', 'text/json; charset=utf-8');
+  }
+  else {
+    drupal_not_found();
+  }
+  print $page_callback_result;
+}
+
+function portales7_newsletter_view_deliver($page_callback_result) {
+  if (isset($page_callback_result) && is_null(drupal_get_http_header('Content-Type'))) {
+    drupal_add_http_header('Content-Type', 'text/html; charset=utf-8');
+  }
+  print $page_callback_result;
+}
+
+
+function portales7_newsletter_theme($existent = array()) {
+  $path = drupal_get_path('module','portales7_newsletter') . '/templates';
+  return array(
+    'newsletter' => array(
+      'template' => 'newsletter',
+      'path' => $path,
+    ),
+    'newsletter-generator' => array(
+      'template' => 'generator',
+      'path' => $path,
+    ),
+  );
+}

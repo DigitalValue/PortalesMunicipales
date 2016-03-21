@@ -1,0 +1,628 @@
+<?php
+
+/**
+ * @file
+ * Module file for Node Example module.
+ *
+ * Part of the Examples for Developers project.
+ */
+
+
+/**
+ * Implements hook_menu().
+ *
+ * We are providing a default page to illustrate the use of our custom node view
+ * mode that will live at http://example.com/?q=examples/node_example
+ */
+function portales7_node_menu() {
+  $items['admin/dashboard/portales7/node-push'] = array(
+    'title' => 'Push notifications',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('portales7_node_push_setup'),
+    'access arguments' => array('administer portales7'),
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'portales7_node.admin.inc',
+  );
+  $items['node/%node/fix-fc'] = array(
+    'title' => 'Fix FC',
+    'page callback' => '_portales7_node_fixfc_node',
+    'page arguments' => array(1),
+    'access arguments' => array('administer drupal'),
+    'file' => 'portales7_node.fixfc.inc',
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['admin/dashboard/portales7/fixfc'] = array(
+    'title' => 'Fix FC',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('portales7_node_fixfc_form'),
+    'access arguments' => array('administer drupal'),
+    'file' => 'portales7_node.fixfc.inc',
+    'type' => MENU_LOCAL_TASK,
+  );
+  return $items;
+}
+
+/**
+ * Callback that builds our content and returns it to the browser.
+ *
+ * This callback comes from hook_menu().
+ *
+ * @return
+ *   a build array
+ *   a renderable array showing a list of our nodes.
+ *
+ * @see node_load()
+ * @see node_view()
+ * @see node_example_field_formatter_view()
+ */
+function portales7_node_page() {
+  // We'll start building a renderable array that will be our page.
+  // For now we just declare the array.
+  $renderable_array = array();
+  // We query the database and find all of the nodes for the type we defined.
+  $sql = 'SELECT nid FROM {node} n WHERE n.type = :type AND n.status = :status';
+  $result = db_query($sql,
+    array(
+      ':type' => 'portales7_node',
+      ':status' => 1,
+    )
+  );
+  $renderable_array['explanation'] = array(
+    '#markup' => t("Portales 7 nodes you've created will be displayed here."),
+    );
+  // Loop through each of our node_example nodes and instruct node_view
+  // to use our "example_node_list" view.
+  // http://api.drupal.org/api/function/node_load/7
+  // http://api.drupal.org/api/function/node_view/7
+  foreach ($result as $row) {
+    $node = node_load($row->nid);
+    $renderable_array['node_list'][]= node_view($node);
+  }
+  return $renderable_array;
+}
+
+/**
+ * Implements hook_entity_info_alter().
+ *
+ * We need to modify the default node entity info by adding a new view mode to
+ * be used in functions like node_view() or node_build_content().
+ */
+/*function portales7_node_entity_info_alter(&$entity_info) {
+  //drupal_set_message(__FUNCTION__, 'status');
+  // Add our new view mode to the list of view modes...
+  $filename = dirname(__FILE__) . '/portales7_node.view_modes.inc';
+  $view_modes = array();
+  if (file_exists($filename)) {
+    include($filename);
+    foreach ($view_modes as $k => $v) {
+      $v['custom settings'] = FALSE;
+      $entity_info['node']['view modes'][$k] = $v;
+    } 
+  }
+}
+*/
+/**
+ * Implements hook_help().
+ */
+function portales7_node_help($path, $arg) {
+  switch ($path) {
+    case 'portales7/portales7_node':
+      return "<p>" . t("The Portales 7 Node module provides a custom node type.
+        You can create new Portales 7 Node nodes using the <a href='!nodeadd'>node add form</a>.",
+        array('!nodeadd' => url('node/add/portales7-node'))) . "</p>";
+  }
+}
+
+function portales7_node_node_info(){
+  module_load_include('node.inc', 'portales7_node');
+  return _portales7_node_node_info();
+}
+
+function portales7_node_node_type_insert($content_type) {
+  if ($content_type->type == 'portales7_node') {
+    module_load_include('node.inc', 'portales7_node');
+    _portales7_node_node_type_insert($content_type);
+  }
+}
+
+
+function _portales7_node_setup_title_field() {
+  $title_node = variable_get('title_node', 
+    array(
+      'auto_attach' => array(
+        'title' => 'title',
+      ),
+      'hide_label' => array(
+        'page' => 'page',
+        'entity' => 'entity',
+      ),
+    )
+  );
+  $title_node['hide_label']['portales7_node'] = 'portales7_node';
+  variable_set('title_node', $title_node);
+  
+  title_field_replacement_toggle('node', 'portales7_node', 'title');
+  title_field_replacement_batch_set('node', 'portales7_node', 'title');
+}
+
+
+/**
+ * Implements hook_date_format_types()
+ */
+function portales7_node_date_format_types() {
+  return array(
+    'sin_hora' => t('Date without time'),
+  );
+}
+
+
+/**
+ * Implements hook_date_formats()
+ */
+function portales7_node_date_formats() {
+  return array(
+    array(
+      'type' => 'sin_hora',
+      'format' => 'j/m/Y',
+      'locales' => array(),
+    ),
+  );
+}
+
+/**
+ * Implements hook_node_preprocess_node().
+ */
+function portales7_node_preprocess_node(&$variables) {
+  if ($variables['view_mode'] == 'full' && node_is_page($variables['node'])) {
+    if ($tid = variable_get('portales7_node_link_tid', '')) {
+      foreach($variables['portales7_type']['und'] as $t) {
+        if ($t['tid'] == $tid && !empty($variables['portales7_weblink'][0]['url'])) {
+          drupal_goto($variables['portales7_weblink'][0]['url'], $variables['portales7_weblink'][0]);
+        }
+        elseif (($term = taxonomy_term_load($t['tid'])) && !empty($term->name)) {
+          $variables['classes_array'][] = 'portales7-type-' . transliteration_get($term->name);
+        }
+      }
+    }
+  }
+  elseif (!empty($variables['portales7_type'])) {
+    foreach ((array) $variables['portales7_type']['und'] as $t) {
+      if (($term = taxonomy_term_load($t['tid'])) && !empty($term->name)) {
+        $variables['classes_array'][] = 'portales7-type-' . transliteration_get($term->name);
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_ctools_render_alter().
+ */
+function portales7_node_ctools_render_alter(&$info, $page, &$context) {
+  if (($page == 1) && (!empty($context['task'])) && ($context['task']['task type'] == 'page') && ($context['task']['name'] == 'node_view')) {
+    $panel_body_css = &drupal_static('panel_body_css');
+    $node = node_load($context['args'][0]);
+    foreach ((array) $node->portales7_type['und'] as $t) {
+      if (($term = taxonomy_term_load($t['tid'])) && !empty($term->name)) {
+        $panel_body_css['body_classes_to_add'] .= ' portales7-type-' . transliteration_get($term->name);
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_ctool_plugin_directory
+ */
+function portales7_node_ctools_plugin_directory($module, $plugin) {
+  if ($module == 'ctools' && !empty($plugin)) {
+   return "plugins/$plugin";
+ }
+}
+
+/**
+ * Implement hook_ctools_plugin_api().
+ */
+function portales7_node_ctools_plugin_api($module, $api) {
+  return array('version' => 1);
+}
+
+/**
+ * Implements hook_entity_presave().
+ */
+function portales7_node_entity_presave($entity, $type) {
+  switch($type) {
+    case 'taxonomy_term':
+      if (!empty($entity->tid) || !empty($entity->portales7_term_image['und'])) return;
+      $name = transliteration_clean_filename($entity->name);
+      $term_path = '/imagenes/taxonomia/' . $entity->vocabulary_machine_name;
+      $files = array();
+      $paths = array(
+        drupal_get_path('theme', variable_get('theme_default', NULL)),
+        drupal_get_path('module', 'portales7_node') . '/resources',
+      );
+      foreach ($paths as $path) {
+        $files += (array) file_scan_directory($path . $term_path, '/\.(png|jpg|gif)$/', array('key' => 'name'));
+      }
+      if (!empty($files[$name])) {
+        $file = $files[$name];
+        $file->status = FILE_STATUS_PERMANENT;
+        $res_uri = PORTALES7_RESOURCEDIR . $term_path;
+        if (file_prepare_directory($res_uri, FILE_CREATE_DIRECTORY|FILE_MODIFY_PERMISSIONS)) {
+          $file = file_copy($file, $res_uri . '/' . $file->filename, FILE_EXISTS_RENAME);
+          $entity->portales7_term_image['und'][0] = (array) $file;
+        }
+        else {
+          drupal_set_message(t("Can't write to directory @dirname", array('@dirname' =>$res_uri)),'error');
+          watchdog('portales7', "Can't write to directory @dirname", array('@dirname' =>$res_uri), WATCHDOG_ERROR);
+        }
+      }
+    break;
+    case 'node':
+      if ($entity->type != 'portales7_node') break;
+      $noticia = dvtoolbox_get_taxonomy_term_by_name('report', 'type', 0, FALSE);
+      $aviso  = dvtoolbox_get_taxonomy_term_by_name('notification', 'type', 0, FALSE);
+      $esnoticia = FALSE;
+      $esaviso = FALSE;
+      foreach ($entity->portales7_type['und'] as $delta => $item) {
+        if ($item['tid'] == $noticia->tid) {$esnoticia = TRUE;}
+        elseif ($item['tid'] == $aviso->tid) {$esaviso = TRUE;}
+      }
+      if ($esnoticia) {
+        if (empty($entity->portales7_newsdate['und'][0])) {
+          drupal_set_message(t('You must provide a value in "Visible date" field to show this content properly. A default value of @date was added.', array('@date' => format_date($entity->created, 'medium'))),'error');
+          $entity->portales7_newsdate['und'][0] = array(
+            'value' => $entity->created,
+            'timezone' => drupal_get_user_timezone());
+        }
+      }
+      /*
+      if ($esaviso) {
+        if (empty($entity->portales7_noticedate['und'][0])) {
+          if (empty($_SESSION['DISABLE_NOTIFICATION_WARNING'])) 
+            drupal_set_message(t('You must provide a value in "Notification date" field to show this content properly. A default value of @date was added, with 10 days validity.', array('@date' => format_date($entity->created, 'medium'))),'error');
+          $entity->portales7_noticedate['und'][0] = array(
+            'value' => $entity->created,
+            'value2' => $entity->created + 864000,
+            'timezone' => drupal_get_user_timezone());
+        }
+      }*/
+    break;
+  }
+}
+
+/**
+ * Implements hook_entity_insert().
+ */
+function portales7_node_entity_insert($entity, $entity_type) {
+  portales7_node_entity_update($entity, $entity_type);
+}
+
+/**
+ * Implements hook_entity_update().
+ */
+function portales7_node_entity_update($entity, $entity_type) {
+  if (variable_get('portales7_node_push_enabled', TRUE) && ($entity_type == 'node') && ($entity->type == 'portales7_node') && ($entity->status) && ($entity->portales7_notification_push)) {
+    portales7_node_push($entity->title, $entity->language);
+  }
+}
+
+/**
+ * Implements hook_form_NODE_TYPE_node_form_validate().
+ */
+function portales7_node_form_portales7_node_node_form_validate($form, &$form_state) {
+  if (!empty($form_state['node']->nid)) {
+    foreach ($form_state['values']['portales7_related_article']['und'] as $delta => $fc) {
+      foreach ($fc['entity']->portales7_r_node['und'] as $d2 => $rn) {
+        if ($rn['target_id'] == $form_state['node']->nid) {
+          form_set_error('portales7_related_article', t("Can't stablish a relationship whit a node and itself"));
+        }
+      }
+    }
+  }
+  $evento = dvtoolbox_get_taxonomy_term_by_name('event', 'type', 0, FALSE);
+  $aviso = dvtoolbox_get_taxonomy_term_by_name('notification', 'type', 0, FALSE);
+  $esaviso = FALSE;
+  $esevento = FALSE;
+  foreach ($form_state['values']['portales7_type']['und'] as $delta => $item) {
+    if ($item['tid'] == $evento->tid) {$esevento = TRUE;}
+    elseif ($item['tid'] == $aviso->tid) {$esaviso = TRUE;}
+  }
+  if ($esevento) {
+    if (empty($form_state['values']['portales7_eventdate']['und'][0]['value'])) {
+      form_set_error('portales7_eventdate', t('You must provide a value in field "@field".', array('@field' => t('Event date'))));
+    }
+    if (empty($form_state['values']['portales7_event_type']['und'][0]['tid'])) {
+      form_set_error('portales7_event_type', t('You must provide a value in field "@field".', array('@field' => t('Event type'))));
+    }
+  }
+  //Desactivada la comprobación a la espera de saber si la volvemos a hacer obligatoria
+  /*if ($esaviso && !empty($form_state['values']['portales7_notification_push'])) {
+    $valid = FALSE;
+    foreach($form_state['values']['portales7_noticedate']['und'] as $k => $v) {
+      if (!empty($v['value']) && ($v['value'] <= REQUEST_TIME) && !empty($v['value2']) && (REQUEST_TIME <= $v['value2'])) {
+        $valid = TRUE;
+        break;
+      }
+    }
+    if (!$valid) {
+      form_set_error('fs_notification', t('At least one of the notification period must include current date to send push notifications.'));
+    }
+  }*/
+}
+
+/**
+ * Implements hook_form_NODE_TYPE_node_form_alter().
+ */
+function portales7_node_form_portales7_node_node_form_alter(&$form, &$form_state, $form_id) {
+  $noticia = dvtoolbox_get_taxonomy_term_by_name('report', 'type', 0, FALSE);
+  $evento = dvtoolbox_get_taxonomy_term_by_name('event', 'type', 0, FALSE);
+  $aviso = dvtoolbox_get_taxonomy_term_by_name('notification', 'type', 0, FALSE);
+  $form['portales7_newsdate']['#states']['required'] = array(
+      ':input[id=edit-portales7-type-und-0-' . $noticia->tid . '-' . $noticia->tid . ']' => array('checked' => TRUE),
+  );
+  
+  if (!empty($_SESSION['DEBUG'])) {
+    drupal_add_js(drupal_get_path('module', 'portales7_node') . '/js/edit_form.js', 'file');
+  }
+  $form['fs_news'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Report'),
+    '#tree' => FALSE,
+    '#collapsible' => TRUE,
+    '#states' => array('visible' => array(':input[id=edit-portales7-type-und-0-' . $noticia->tid . '-' . $noticia->tid . ']' => array('checked' => TRUE))),
+    '#attributes' => array('class' => array('portales7-dynamic-fieldset')),
+  );
+  
+  foreach (array( 'pretitle', 'subtitle', 'newsdate') as $fn) {
+    $form['fs_news']['portales7_' . $fn] = $form['portales7_' . $fn]; 
+    unset($form['portales7_' . $fn]);
+  }
+
+  $form['fs_event'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Event'),
+    '#tree' => FALSE,
+    '#collapsible' => TRUE,
+    '#states' => array(
+      'visible' => array(
+        ':input[id=edit-portales7-type-und-0-' . $evento->tid . '-' . $evento->tid . ']' => array('checked' => TRUE),
+      ),
+    ),
+    '#attributes' => array('class' => array('portales7-dynamic-fieldset')),
+  );
+  foreach (array('eventdate', 'eventcalendar', 'event_type', 'event_note') as $fn) {
+    $form['fs_event']['portales7_' . $fn] = $form['portales7_' . $fn]; 
+    unset($form['portales7_' . $fn]);
+  }
+  $form['fs_event']['portales7_event_type']['#states']['required'] = array(':input[id=edit-portales7-type-und-0-7-7]' => array('checked' => TRUE));
+  $form['fs_event']['portales7_eventdate']['#states']['required'] = array(':input[id=edit-portales7-type-und-0-7-7]' => array('checked' => TRUE));
+  
+  $selector = ':input[id=edit-portales7-type-und-0-' . $aviso->tid . '-' . $aviso->tid . ']';
+  $form['fs_notification'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Notification'),
+    '#tree' => FALSE,
+    '#collapsible' => TRUE,
+    '#states' => array(
+      'visible' => array(
+        $selector => array('checked' => TRUE),
+      ),
+    ),
+    '#attributes' => array('class' => array('portales7-dynamic-fieldset')),
+  );
+  
+  //Desactivado a la espera de decidir que hacer con él
+  //$form['portales7_noticedate']['#states']['visible'] = array($selector => array('checked' => TRUE));
+  //$form['portales7_noticedate']['#states']['required'] = array($selector => array('checked' => TRUE));
+  $form['portales7_noticedate']['#access'] = FALSE;
+  
+  $form['fs_notification']['portales7_noticedate'] = $form['portales7_noticedate'];
+  $form['fs_notification']['portales7_notification_push'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Send push'),
+    '#description' => t('Send push notification to devices registered with the mobile app. Notification will be sent INMEDIATELY and is not affected by publish status or scheduling.'),
+  );
+  unset($form['portales7_noticedate']);
+
+  $form['#validate'][] = 'portales7_node_form_portales7_node_node_form_validate';
+  $form['#after_build'][] = 'portales7_node_after_build';
+}
+
+function portales7_node_after_build($form, &$form_state){
+  drupal_add_js('document.addEventListener("DOMContentLoaded", function(event) {
+  var events = document.getElementById("edit-fs-event");
+  var notifications = document.getElementById("edit-fs-notification");
+  var report = document.getElementById("edit-fs-news");
+  var portales7basic = document.getElementById("edit-portales7_basic");
+  portales7basic.appendChild(events);
+  portales7basic.appendChild(notifications);
+  portales7basic.appendChild(report);
+  });
+  ', 'inline');
+  return $form;
+}
+
+
+/**
+ * Implements hook_theme().
+ */
+function portales7_node_theme($existing, $type, $theme, $path) {
+  $themes = array(
+    'portales7_related_article_default' => array(
+      'variables' => array('fc_items' => '', 'fc_name' => ''),
+      'template' => 'portales7_fc_named_group',
+      'path' => drupal_get_path('module', 'portales7_node') . '/templates',
+    ),
+    'portales7_related_entity' => array(
+      'variables' => array('item' => ''),
+      'template' => 'portales7_fc_named_group',
+      'preprocess functions' => array('portales7_node_related_entity_preprocess'),
+      'path' => drupal_get_path('module', 'portales7_node') . '/templates',
+    ),
+    'portales7_main_media' => array(
+      'variables' => array('fc_items' => '', 'fc_name' => ''),
+      'template' => 'portales7_fc_named_group',
+      'path' => drupal_get_path('module', 'portales7_node') . '/templates',
+    ),
+    'portales7_media' => array(
+      'variables' => array('fc_items' => '', 'fc_name' => ''),
+      'template' => 'portales7_fc_named_group',
+      'path' => drupal_get_path('module', 'portales7_node') . '/templates',
+    ),
+    'portales7_fc_named_group' => array(
+      'variables' => array('fc_items' => '', 'fc_name' => ''),
+      'template' => 'portales7_fc_named_group',
+      'path' => drupal_get_path('module', 'portales7_node') . '/templates',
+    ),
+  );
+  return $themes;
+}
+
+/**
+ * Preprocess handler for related_entity theme hook.
+ */
+function portales7_node_related_entity_preprocess(&$vars) {
+  global $user;
+  $item = $vars['item'];
+  $view_mode = !empty($item->portales7_fc_formatter['und'][0]['value']) ? $item->portales7_fc_formatter['und'][0]['value'] : 'default';
+  $vars['fc_name'] = !empty($item->portales7_fc_name['und'][0]['value']) ? $item->portales7_fc_name['und'][0]['value'] : '';
+  $vars['fc_description'] = !empty($item->portales7_fc_description['und'][0]['value']) ? check_markup($item->portales7_fc_description['und'][0]['value'], $item->portales7_fc_description['und'][0]['format']) : '';
+  $vars['fc_formatter'] = $view_mode;
+  $vars['fc_classes'] = array();
+  $children = array();
+  $items = array();
+  switch($item->field_name) {
+    case 'portales7_related_article':
+      $items = $item->portales7_r_node['und'];
+    break;
+    default:
+      $items = $item->portales7_re_entities['und'];
+  }
+  foreach ($items as $delta => $v) {
+    if (($node = node_load($v['target_id'])) && node_access('view', $node)) {
+      $render = node_view($node, $view_mode);
+      $children[] = drupal_render($render);
+    }
+  }
+  $vars['fc_items'] = !empty($children) ? theme('item_list', array('items' => $children)) : NULL;
+  if (!empty($children)) return FALSE;
+}
+
+function portales7_node_preprocess_portales7_related_article_default(&$vars) {
+  $item = $vars['item'];
+  $vars['fc_name'] = !empty($item->portales7_fc_name['und'][0]['value']) ? $item->portales7_fc_name['und'][0]['value'] : '';
+  $related = array();
+  foreach($item->portales7_r_node['und'] as $delta => $entity) {
+    $node = node_load($entity['target_id']);
+    if (!empty($node)) {
+      $related[] = l($node->title, 'node/' . $node->nid);
+    }
+  }
+  $vars['fc_items'] = theme('item_list', array('items' => $related));
+}
+
+/**
+ * Implements hook_ds_view_modes_info().
+ */
+function portales7_node_ds_view_modes_info() {
+  module_load_include('node.inc', 'portales7_node');
+  $vms = portales7_node_default_view_modes();
+  $ds_view_modes = array();
+  foreach ($vms as $k => $vm) {
+    $ds_view_modes[$k] = (object) array(
+      'disabled' => FALSE,
+      'api_version' => 1,
+      'view_mode' => $k,
+      'label' => $vm['label'],
+      'entities' => array ('node' => 'node'),
+    );
+  }
+  module_load_include('fc.inc', 'portales7_node');
+  $vms = _portales7_node_fc_view_modes();
+  foreach ($vms as $f => $data) {
+    foreach ($data as $k => $vm) {
+      if (empty($ds_view_modes[$k])) {
+        $ds_view_modes[$k] = (object) array(
+          'disabled' => FALSE,
+          'api_version' => 1,
+          'view_mode' => $k,
+          'label' => $vm['label'],
+          'entities' => array ('field_collection_item' => 'field_collection_item'),
+        );
+      }
+      else {
+        $ds_view_modes[$k]->entities['field_collection_item'] = 'field_collection_item';
+      }
+    }
+  }
+  return $ds_view_modes;
+}
+
+/**
+ * Implements hook_token_info().
+ */
+function portales7_node_token_info() {
+  $info = array();
+  $info['tokens']['node']['portales7_opengraph_image'] = array(
+      'name' => t('Campo de imagen para opengraph'),
+      'description' => t('Campo de imagen para og'),
+    );
+  return $info;
+}
+
+/**
+ * Implements hook_tokens().
+ */
+function portales7_node_tokens($type, $tokens, array $data = array(), array $options = array()) {
+  $replacements = array();
+  if ($type == 'node') {
+    foreach ($tokens as $name => $original) {
+      switch ($name) {
+        case 'portales7_opengraph_image':
+          $node= $data['node'];
+          $cc = entity_load('field_collection_item',array($node->portales7_main_media['und'][0]['value']));
+          $cc_reset = reset($cc);
+          $uri = $cc_reset->portales7_mm_image['und'][0]['uri'];
+          $urlImagen = file_create_url($uri);
+          $replacements[$original] = $urlImagen;
+          break;
+      }
+    }
+  }
+  return $replacements;
+}
+
+function portales7_node_push($message, $lang = LANGUAGE_NONE) {
+  if (!variable_get('portales7_node_push_enabled', FALSE)) return;
+  if (!$app = variable_get('portales7_node_push_app', FALSE)) {
+    watchdog('push', 'Trying to send push without app code', NULL, WATCHDOG_ERROR);
+    return;
+  }
+  if (!$push_url = variable_get('portales7_node_push_url', 'http://push.digitalvalue.es:8090/v1/pushes/push')) {
+    watchdog('push', 'Trying to send push without push server', NULL, WATCHDOG_ERROR);
+    return;
+  }
+  $data = array(
+    "app" => $app,
+    "content" => array(),
+    "platforms" => array(3, 1),
+  );
+  
+  if ($tag = variable_get('portales7_node_push_tag', FALSE)) { $data['tags'] = array($tag); }
+  if ($prefix = variable_get('portales7_node_push_prefix', '')) $prefix .= ' ';
+  
+  if ($lang == LANGUAGE_NONE) {
+    foreach (array_keys(language_list()) as $lc) {
+      $data['content'][$lc] = format_string($prefix . $message, array('!date' => format_date(REQUEST_TIME, 'sin_hora')));
+    }
+  }
+  else {
+      $data['content'][$lang] = format_string($prefix . $message, array('!date' => format_date(REQUEST_TIME, 'sin_hora')));
+  }
+  $authToken = variable_get('portales7_node_auth_token', '');
+  $url = url($push_url, array('query' => array('authToken' => $authToken, 'code' => $app)));
+  $ret = dvtoolbox_curl_get($url, 'JSON', $data);
+  watchdog('portales7_push', 'Request data !data', array('!data' => json_encode($data, JSON_PRETTY_PRINT)), WATCHDOG_INFO);
+  watchdog('portales7_push', 'Response !data', array('!data' => '<pre>' . print_r($ret, 1) . '</pre>'), WATCHDOG_INFO);
+  drupal_set_message(t('A push notification has been sent'), 'status');
+  return $ret;
+}

@@ -1,0 +1,7 @@
+name = Portales 7 Slideshow
+description = Show contents of imagefield inside a jQuery Slideshow
+package = Portales 7 by Digital Value, SL.
+version = 0.1-dev
+core = 7.x
+dependencies[] = jquery_plugin
+

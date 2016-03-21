@@ -1,0 +1,48 @@
+<?php
+
+/**
+ * plupload doesn't work well with * extensions
+ * https://drupal.org/node/1864726
+ */
+/**
+ * Implements hook_element_info_alter().
+ */
+function dvfixes_element_info_alter(&$type) {
+  if (isset($type['plupload'])) {
+    $type['plupload']['#process'][] = 'dvfixes_plupload_element_process';
+  }
+}
+/**
+ * Process plupload element.
+ */
+function dvfixes_plupload_element_process($element) {
+  // Remove extension validation if using IMCE.
+  if (isset($element['#upload_validators']['imce_validate_all'])) {
+    unset($element['#upload_validators']['file_validate_extensions']);
+  }
+  return $element;
+}
+
+
+/**
+ * https://drupal.org/node/2172375#comment-8650163
+ */
+function dvfixes_entity_presave($entity, $type) {
+  switch ($type) {
+    case 'file':
+      $entity->filemime = file_get_mimetype($entity->uri);
+    break;
+  }
+}
+
+/**
+ * https://drupal.org/node/2172375#comment-8650163
+ */
+function dvfixes_fix_filemimes() {
+  //Snippet to fix incorrect filemime on database.
+  //RUN AT YOUR OWN RISK!!!
+  $files = db_select('file_managed','fm')->fields('fm', array('fid', 'uri'))->condition('filemime', 'application/octet-stream')->execute()->fetchAll();
+  foreach ($files as $file) {
+    db_update('file_managed')->fields(array('filemime' => file_get_mimetype($file->uri)))->condition('fid', $file->fid)->execute();
+  }
+}

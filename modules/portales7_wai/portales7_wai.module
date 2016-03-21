@@ -1,0 +1,34 @@
+<?php
+function portales7_wai_menu() {
+  $items['wai-toggle'] = array(
+    'title' => 'WAI toggle',
+    'description' => 'Toggle accessible version on/off',
+    'type' => MENU_CALLBACK,
+    'access arguments' => array('access content'),
+    'page callback' => '_portales7_wai_toggle',
+    'callback arguments' => array(2),
+    );
+  return $items;
+}
+
+
+function _portales7_wai_toggle($action=null){
+  if ($action=='enable') $_SESSION['wai_version'] = TRUE;
+  elseif ($action=='disable') $_SESSION['wai_version'] = FALSE;
+  else $_SESSION['wai_version'] = empty($_SESSION['wai_version']) ? 1 : NULL;
+  if (!empty ($_REQUEST['destination'])) $destination = $_REQUEST['destination'];
+  if (empty($destination)) $destination=$_SERVER['HTTP_REFERER'];
+  drupal_goto($destination);
+  return FALSE;
+}
+
+
+/**
+* Implementation of hook_ctools_plugin_dierctory() to let the system know
+* where our content_type plugins are.
+*/
+function portales7_wai_ctools_plugin_directory($module, $plugin) {
+  if ($module == 'ctools') {
+    return 'plugins/' . $plugin;
+  }
+}

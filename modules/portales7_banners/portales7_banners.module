@@ -1,0 +1,371 @@
+<?php
+/**
+* @file
+* A banner system for portalesmunicipales
+*/
+
+/**
+* Implements hook_help.
+*
+* Displays help and module information.
+*
+* @param path
+*   Which path of the site we're using to display help
+* @param arg
+*   Array that holds the current path as returned from arg() function
+*/
+function portales7_banners_help($path, $arg) {
+  switch ($path) {
+    case "admin/help#portales7_banners":
+      return '<p>'.  t("Custom wiew panes") .'</p>';
+      break;
+  }
+}
+
+function _portales7_banners_get_contents($type, $arguments, $fields, $numitems, $offset) {
+  $view = _portales7_banners_prepare_view($type, $arguments, $fields, $numitems, $offset);
+  $output = $view->execute_display('default',$arguments);
+  return $output;
+}
+
+function portales7_banners_theme($existing, $type, $theme, $path) {
+  return array(
+    'portales7_banners_banners' => array (
+      'variables' => array('view' => NULL, 'options' => NULL, 'row' => NULL),
+      'template' => 'portales7_banners_banners',
+      'base hook' => 'views_view_fields',
+      'path' => drupal_get_path('module', 'portales7_banners') . '/templates',
+    ),
+    'portales7_banners_migration_page_form' => array(
+      'render element' => 'form',
+      'file' => 'portales7_banners.migration.inc',
+    ),
+  );
+}
+
+/**
+* Implementation of hook_ctools_plugin_dierctory() to let the system know
+* where our content_type plugins are.
+*/
+function portales7_banners_ctools_plugin_directory($module, $plugin) {
+  if ($module == 'ctools') {
+    return 'plugins/' . $plugin;
+  }
+}
+
+function portales7_banners_preprocess_views_view_fields(&$variables) {
+  module_load_include('inc', 'portales7_banners', 'portales7_banners.theme');
+  $user_func = 'portales7_banners_preprocess_' . $variables['view']->name;
+  if (function_exists($user_func)) {
+    $user_func($variables);
+  }
+  $variables['theme_hook_suggestion'] = $variables['view']->name;
+}
+
+/**
+ * Implement hook_ctools_plugin_api().
+ *
+ * If you do this, CTools will pick up default panels pages in
+ * <modulename>.pages_default.inc
+ */
+function portales7_banners_ctools_plugin_api($module, $api) {
+  if ($module == 'page_manager' && $api == 'pages_default') {
+    return array('version' => 1);
+  }
+}
+
+/**
+ * Implements hook_menu()
+ */
+function portales7_banners_menu() {
+  $items['admin/dashboard/portales7/banners-autoimport'] = array(
+    'title' => 'Banners from CSV',
+    'type' => MENU_LOCAL_TASK,
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('portales7_banners_autoimport_form'),
+    'file' => 'portales7_banners.autoimport.inc',
+    'access arguments' => array('administer portales7'),
+  );
+  return $items;
+}
+
+/* Coses de la vista */
+
+function _portales7_banners_generic_filefield_add($field, &$handler, $formatter = 'thumbnail') {
+  if ($formatter == 'original') $formatter = '';
+  /* Campo: Contenido: Images */
+  $handler->display->display_options['fields'][$field] = _portales7_banners_default_settings();
+  $handler->display->display_options['fields'][$field]['id'] = $field;
+  $handler->display->display_options['fields'][$field]['table'] = "field_data_$field";
+  $handler->display->display_options['fields'][$field]['field'] = $field;
+  $handler->display->display_options['fields'][$field]['click_sort_column'] = 'fid';
+  $handler->display->display_options['fields'][$field]['settings'] = array(
+    'image_style' => $formatter,
+    'image_link' => 'content',
+    'widthxheight' => $formatter,
+  );
+  $handler->display->display_options['fields'][$field]['group_rows'] = 1;
+  $handler->display->display_options['fields'][$field]['delta_offset'] = '0';
+  $handler->display->display_options['fields'][$field]['delta_reversed'] = 0;
+  $handler->display->display_options['fields'][$field]['delta_first_last'] = 0;
+  $handler->display->display_options['fields'][$field]['field_api_classes'] = 0;
+  $handler->display->display_options['fields'][$field]['element_wrapper_class'] = 'portales7-' . $formatter;
+}
+
+function _portales7_banners_generic_text_add($field, &$handler, $trim = 600) {  
+  _portales7_banners_generic_formatted_text_add($field, $handler, 'text_summary_or_trimmed', array('trim_length' => $trim));
+}
+
+function _portales7_banners_generic_formatted_text_add($field, &$handler, $formatter = 'text_summary_or_trimmed', $options = array('trim_length' => 600)) {
+  $handler->display->display_options['fields'][$field] = _portales7_banners_default_settings();
+  $handler->display->display_options['fields'][$field]['id'] = $field;
+  $handler->display->display_options['fields'][$field]['table'] = "field_data_$field";
+  $handler->display->display_options['fields'][$field]['field'] = $field;
+  $handler->display->display_options['fields'][$field]['type'] = $formatter;
+  $handler->display->display_options['fields'][$field]['settings'] = $options;
+}
+
+function _portales7_banners_generic_date_add($field, &$handler, $format = 'fecha_texto'){
+  /* Campo: Contenido: News date */
+  $handler->display->display_options['fields'][$field] = _portales7_banners_default_settings();
+  $handler->display->display_options['fields'][$field]['id'] = $field;
+  $handler->display->display_options['fields'][$field]['table'] = 'field_data_' . $field;
+  $handler->display->display_options['fields'][$field]['field'] = $field;
+  $handler->display->display_options['fields'][$field]['settings'] = array(
+    'format_type' => $format,
+    'fromto' => 'both',
+    'multiple_number' => '',
+    'multiple_from' => '',
+    'multiple_to' => '',
+  );
+}
+
+function _portales7_banners_generic_videos_add($field, &$handler, $formatter = '640x480') {
+  /* Campo: Contenido: Audio or video files */
+  $field = 'portales7_videos';
+  $handler->display->display_options['fields'][$field] = _portales7_banners_default_settings();
+  $handler->display->display_options['fields'][$field]['id'] = $field;
+  $handler->display->display_options['fields'][$field]['table'] = 'field_data_' . $field;
+  $handler->display->display_options['fields'][$field]['field'] = $field;
+  $handler->display->display_options['fields'][$field]['click_sort_column'] = 'fid';
+  $handler->display->display_options['fields'][$field]['settings'] = array(
+    'widthxheight' => $formatter,
+  );
+  $handler->display->display_options['fields'][$field]['group_rows'] = 1;
+  $handler->display->display_options['fields'][$field]['delta_offset'] = '0';
+  $handler->display->display_options['fields'][$field]['delta_reversed'] = 0;
+  $handler->display->display_options['fields'][$field]['delta_first_last'] = 0;
+  $handler->display->display_options['fields'][$field]['field_api_classes'] = 0;
+}
+
+function _portales7_banners_generic_field_add(&$handler, $field, $options = array()) {
+  /* Campo: Contenido: Título */
+  $handler->display->display_options['fields'][$field] = _portales7_banners_default_settings();
+  $handler->display->display_options['fields'][$field]['id'] = $field;
+  $handler->display->display_options['fields'][$field]['table'] = 'node';
+  $handler->display->display_options['fields'][$field]['field'] = $field;
+  $handler->display->display_options['fields'][$field]['label'] = '';
+  if (is_array($options)) {
+    foreach ($options as $k => $v) {
+      $handler->display->display_options['fields'][$field][$k] = $v;
+    }
+  }
+}
+
+function _portales7_banners_generic_taxonomy_field_add($field, &$handler) {
+  /* Campo: Contenido: Banner Group. */
+  $handler->display->display_options['fields'][$field]['id'] = $field;
+  $handler->display->display_options['fields'][$field]['table'] = 'field_data_' . $field;
+  $handler->display->display_options['fields'][$field]['field'] = $field;
+  $handler->display->display_options['fields'][$field]['label'] = '';
+  $handler->display->display_options['fields'][$field]['alter']['alter_text'] = 0;
+  $handler->display->display_options['fields'][$field]['alter']['make_link'] = 0;
+  $handler->display->display_options['fields'][$field]['alter']['absolute'] = 0;
+  $handler->display->display_options['fields'][$field]['alter']['external'] = 0;
+  $handler->display->display_options['fields'][$field]['alter']['replace_spaces'] = 0;
+  $handler->display->display_options['fields'][$field]['alter']['trim_whitespace'] = 0;
+  $handler->display->display_options['fields'][$field]['alter']['nl2br'] = 0;
+  $handler->display->display_options['fields'][$field]['alter']['word_boundary'] = 1;
+  $handler->display->display_options['fields'][$field]['alter']['ellipsis'] = 1;
+  $handler->display->display_options['fields'][$field]['alter']['more_link'] = 0;
+  $handler->display->display_options['fields'][$field]['alter']['strip_tags'] = 0;
+  $handler->display->display_options['fields'][$field]['alter']['trim'] = 0;
+  $handler->display->display_options['fields'][$field]['alter']['html'] = 0;
+  $handler->display->display_options['fields'][$field]['element_label_colon'] = FALSE;
+  $handler->display->display_options['fields'][$field]['element_default_classes'] = 1;
+  $handler->display->display_options['fields'][$field]['hide_empty'] = 0;
+  $handler->display->display_options['fields'][$field]['empty_zero'] = 0;
+  $handler->display->display_options['fields'][$field]['hide_alter_empty'] = 1;
+  $handler->display->display_options['fields'][$field]['type'] = 'taxonomy_term_reference_plain';
+  $handler->display->display_options['fields'][$field]['group_rows'] = 1;
+  $handler->display->display_options['fields'][$field]['delta_offset'] = '0';
+  $handler->display->display_options['fields'][$field]['delta_reversed'] = 0;
+  $handler->display->display_options['fields'][$field]['delta_first_last'] = 0;
+  $handler->display->display_options['fields'][$field]['field_api_classes'] = 0;
+}
+
+
+function portales7_banners_preprocess_panels_pane(&$variables) {
+  $pane = $variables['pane'];
+  if (!empty($pane->configuration['override_title']) && !empty($variables['title'])) {
+    $variables['title'] = t($variables['title']);
+  }
+}
+
+
+/**
+ * Implements hook_node_info()
+ */
+function portales7_banners_node_info() {
+  module_load_include('node.inc', 'portales7_banners');
+  return _portales7_banners_node_info();
+}
+
+
+/**
+ * Implements hook_node_type_insert().
+ */
+function portales7_banners_node_type_insert($content_type) {
+  switch($content_type->type) {
+    case 'portales7_banner':
+      module_load_include('node.inc', 'portales7_banners');
+      return _portales7_banners_node_type_insert($content_type);
+    break;
+    case 'portales7_node':
+      _portales7_banners_create_banner_group();
+    break;
+  }
+}
+
+function _portales7_banners_create_banner_group() {
+  $groups = array(
+    'form' => array (
+      'portales7_multipage' => (object) array(
+        'label' => '',
+        'weight' => 0,
+        'children' => array('portales7_basic', 'portales7_info', 'portales7_attachments', 'portales7_banners', 'portales7_event', 'portales7_language', 'portales7_relationships', 'portales7_extra'),
+        'mode' => 'form',
+        'format_type' => 'htabs',
+        'format_settings' => array(
+          'label' => '', 
+          'instance_settings' => array(
+            'page_header' => 3,
+            'page_counter' => 1,
+            'move_button' => 1,
+            'move_additional' => 1, 
+            'classes' => '', 
+            'description' => '',
+          ),
+        'formatter' => 'start',
+        ),
+      ),
+      'portales7_banners' => (object) array(
+        'label' => 'Banner',
+        'weight' => 3,
+        'children' => array('portales7_inline_banner'),
+        'mode' => 'form',
+        'format_type' => 'htab',
+        'format_settings' => array(
+          'label' => 'Banner', 
+          'instance_settings' => array(
+            'required_fields' => 0, 
+            'classes' => '', 
+            'description' => '',
+          ),
+          'formatter' => 'no-start',
+        ),
+        'disabled' => FALSE,
+        'parent_name' => 'portales7_multipage',
+      ),
+    ),
+  );
+  if ($banners = field_group_load_field_group('portales7_banners', 'node', 'portales7_node', 'form')) {
+    db_delete('field_group')->condition('id', $banners->id)->execute();
+  }
+  $groups['form']['portales7_multipage']->children[] = 'portales7_banners';
+  $groups['form']['portales7_multipage']->children = array_unique($groups['form']['portales7_multipage']->children);
+  
+  module_load_include('field.inc', 'dvtoolbox');
+  dvtoolbox_field_create_groups('node', array('portales7_node' => $groups));
+  field_cache_clear();
+}
+
+/**
+ * Implements hook_image_default_styles().
+ */
+function portales7_banners_image_default_styles() {
+  $styles = array();
+  foreach (array(200, 250, 300) as $width) {
+    $styles['banner-' . $width] = array(
+    'name' => 'banner-' . $width,
+    'label' => 'Banner '. $width,
+    'effects' => array(
+      array (
+        'label' => 'EPSA Image Crop',
+        'name' => 'epsacrop_crop',
+        'data' => array (
+          'width' => $width,
+          'height' => round($width * 0.75, 0),
+          'anchor' => 'left-top',
+          'jcrop_settings' => array(
+            'aspect_ratio' => '',
+            'bgcolor' => 'black',
+            'bgopacity' => '0.6',
+            'fallback' => 1,
+          ),
+        ),
+        'weight' => '-10',
+      ), 
+      array (
+        'label' => 'Escala',
+        'name' => 'image_scale',
+        'data' => array (
+          'width' => $width,
+          'height' => '',
+          'upscale' => 0,
+        ),
+        'weight' => '-9',
+      ),
+      array (
+        'label' => 'Define canvas',
+        'name' => 'canvasactions_definecanvas',
+        'data' => array(
+          'RGB' => array(
+            'HEX' => '#ffffff',
+          ),
+          'under' => 1,
+          'exact' => array (
+            'width' => $width,
+            'height' => round($width * 0.75, 0),
+            'xpos' => 'left',
+            'ypos' => 'top',
+          ),
+          'relative' => array(
+            'leftdiff' => '',
+            'rightdiff' => '',
+            'topdiff' => '',
+            'bottomdiff' => '',
+          ),
+        ),
+        'weight' => '-8',
+      ),
+    ),
+  );
+  }
+  return $styles;
+}
+
+function portales7_banners_entity_insert($entity, $type) {
+  return portales7_banners_entity_update($entity, $type);
+}
+
+function portales7_banners_entity_update($entity, $type) {
+  if ($type == 'node' && !empty($entity->portales7_inline_banner['und'])) {
+    foreach ($entity->portales7_inline_banner['und'] as $delta => $item) {
+      $node = node_load($item['target_id']);
+      $node->portales7_banners_node['und'][0] = array('nid' => $entity->nid);
+      drupal_set_message(t('Updating %nid %title', array('%nid' => $node->nid, '%title' => $node->title)), 'status');
+      node_save($node);
+    }
+  }
+}

@@ -1,0 +1,8 @@
+name = Portales 7 Newsletter
+description = Newsletter generator for Portales 7
+core = 7.x
+version = 0.4
+package = Portales 7 by Digital Value, SL.
+dependencies[] = portales7
+dependencies[] = jquery_plugin
+

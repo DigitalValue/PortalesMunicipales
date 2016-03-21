@@ -1,0 +1,541 @@
+<?php
+
+/**
+ * @file
+ * This module creates a formatter for CCK filefields that
+ * shows a slideshow with images of the fields
+ *
+ * @defgroup portales7_slideshow portales7_slideshow: generate slideshows  with images from a field.
+ * @author Juanjo Garcia <juanjo.gcia@gmail.com>
+ *  Main file for the portales7_slideshow module
+ *
+ */
+
+/**
+ * Implements hook_field_formatter_info().
+ */
+function portales7_slideshow_field_formatter_info() {
+  $formatters = array(
+    'portales7_slideshow' => array(
+      'label' => t('Portales 7 slideshow'),
+      'field types' => array('field_collection'),
+      'description' => t('Displays all items of the field inside a slideshow'),
+      'settings' => array('image_link' => '', 'image_style' => '', 'inlinetitle' => TRUE, 'effect' => 'blindX', 'speed' => 1000, 'timeout' => 4000, 'showcontrols' => FALSE),
+    ),
+  );
+
+  return $formatters;
+}
+
+
+function _portales7_slideshow_pane_defaults() {
+  return array('effect' => 'blindX', 'speed' => 1000, 'timeout' => 4000, 'showcontrols' => FALSE);
+}
+
+function _portales7_slideshow_pane_default_edit_form(&$form, $conf) {
+  $form['slideshow'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Slideshow'),
+    '#tree' => FALSE,
+    '#collapsed' => FALSE,
+    '#collapsible' => TRUE,
+    '#weight' => 95,
+  );
+  $form['slideshow']['effect'] = array(
+    '#type' => 'select',
+    '#multiple' => FALSE,
+    '#title' => t('Transition effect'),
+    '#description' => t('Choose wich transition effect slideshow will use'),
+    '#options' => _portales7_slideshow_available_effects(),
+    '#default_value' => $conf['effect'],
+  );
+  $form['slideshow']['timeout'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Duration'),
+    '#description' => t('How much time, in milliseconds, will be shown every item.'),
+    '#default_value' => $conf['timeout'],
+    '#required' => TRUE,
+  );
+  $form['slideshow']['speed'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Speed'),
+    '#description' => t('Duration, in milliseconds, of the transition effect.'),
+    '#default_value' => $conf['speed'],
+    '#required' => TRUE,
+  );
+  $form['slideshow']['showcontrols'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Show controls'),
+    '#description' => t('Show controls at the bottom of the slideshow'),
+    '#default_value' => $conf['showcontrols'],
+    '#return_value' => 1,
+  );
+}
+
+
+/**
+ * Implements hook_field_formatter_settings_form().
+ */
+function portales7_slideshow_field_formatter_settings_form($field, $instance, $view_mode, $form, &$form_state) {
+  //We want our user feel familiar with our settings, and reuse code.
+  $form = image_field_formatter_settings_form($field, $instance, $view_mode, $form, $form_state);
+  $conf = $instance['display'][$view_mode]['settings'];
+  $form['inlinetitle'] = array(
+          '#type' => 'checkbox',
+          '#title' => t('Show image title'),
+          '#description' => t('Show image title'),
+          '#return_value' => 1,
+          '#default_value' => $conf['inlinetitle'],
+  );
+  $form['effect'] = array(
+      '#type' => 'select',
+      '#multiple' => FALSE,
+      '#title' => t('Transition effect'),
+      '#description' => t('Choose wich transition effect slideshow will use'),
+      '#options' => _portales7_slideshow_available_effects(),
+      '#default_value' => $conf['effect'],
+  );
+  $form['timeout'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Duration'),
+      '#description' => t('How much time, in milliseconds, will be shown every item.'),
+      '#default_value' => $conf['timeout'],
+      '#required' => TRUE,
+  );
+  $form['speed'] = array(
+        '#type' => 'textfield',
+        '#title' => t('Speed'),
+        '#description' => t('Duration, in milliseconds, of the transition effect.'),
+        '#default_value' => $conf['speed'],
+        '#required' => TRUE,
+  );
+
+
+  return $form;
+}
+
+/**
+ * Implements hook_field_formatter_settings_summary().
+ */
+function portales7_slideshow_field_formatter_settings_summary($field, $instance, $view_mode) {
+  //again, act like image module
+  $conf = $instance['display'][$view_mode]['settings'];
+  $summary = image_field_formatter_settings_summary($field, $instance, $view_mode);
+  $summary .= '<br />' . t('Titles are %desc. Effect:  %effect. Timeout: %timeout. Speed: %speed',
+    array('%desc' => $conf['inlinetitle'] ? t('visible') : t('hidden'),
+          '%effect' => $conf['effect'],
+          '%timeout' => $conf['timeout'],
+          '%speed' => $conf['speed']));
+
+  return $summary;
+}
+
+
+function portales7_slideshow_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
+  //if (TRUE && !empty($_SESSION['DEBUG']) && !empty($items)) dpm(array('entity_type' => $entity_type, 'entity' => $entity, 'field' => $field, 'instance' => $instance, 'langcode' => $langcode, 'items' => $items, 'display' => $display), __FUNCTION__);
+  if ($field['type'] == 'field_collection') {
+    foreach($items as $fc_media) {
+      $fc_items = entity_load('field_collection_item', array($fc_media['raw']['value']));
+      $fc_item = array_shift($fc_items);
+      if (!empty($fc_item->portales7_images['und'])) {
+        foreach ($fc_item->portales7_images['und'] as $image) {
+          $image['nid'] = $r->nid;
+          $elements['items'][] = $image;
+        }
+      }
+    }
+    $elements['classes'] = array('portales7-slideshow-' . $conf['image_style']);
+    $pane = new stdClass();
+    return theme('portales7_slideshow', $elements);
+  }
+}
+
+/**
+ * Implements hook_theme().
+ *
+ */
+function portales7_slideshow_theme($existing, $type, $theme, $path) {
+  return array(
+    'portales7_slideshow' => array(
+      'function' => 'theme_portales7_slideshow_formatter',
+      'variables' => array('conf' => array(), 'node' => NULL),
+    ),
+    'portales7_slideshow_definitive' => array(
+      'function' => 'theme_portales7_slideshow_definitive_formatter',
+      'variables' => array('conf' => array(), 'node' => NULL),
+    ),
+    'portales7_slideshow_carousel' => array(
+      'function' => 'theme_portales7_slideshow_carousel_formatter',
+      'variables' => array('conf' => array(), 'node' => NULL),
+    ),
+    'portales7_slideshow_kenburns' => array(
+      'function' => 'theme_portales7_slideshow_kenburns_formatter',
+      'variables' => array('conf' => array(), 'node' => NULL),
+    ),
+  );
+}
+
+/**
+ * Theming functions for our formatters
+ */
+function theme_portales7_slideshow_formatter($variables) {
+  drupal_add_css(drupal_get_path('module', 'portales7_slideshow') . '/portales7_slideshow.css');
+  $elements=$variables['items'];
+  $variables['classes'][] = (count($elements) > 1) ? 'portales7_slideshow-multiple' : 'portales7_slideshow-simple';
+  $classes = !empty($variables['classes']) ? join(' ', $variables['classes']) : '';
+  $slideshow_id = 'portales7-slideshow-' . $variables['node']->nid;
+  $html = '<div class="portales7_slideshow ' . $classes . '" id="' . $slideshow_id . '">';
+  $conf = $variables['conf'];
+  $visible = '';
+  foreach ($elements as $key => $item) {
+    $html .= '<div class="portales7_slideshow-slide" '. $visible . '>';
+    $visible = ' style="display: none"';
+    $element = array();
+    $element['item'] = $item;
+    $element['image_style'] = $conf['image_style'];
+    switch ($conf['image_link']) {
+    case 'file':
+      $element['path'] = array(
+        'path' => file_create_url($item['uri']),
+        'options' => array(),
+      );
+      break;
+      case 'content':
+      $element['path'] = array(
+        'path' => $variables['entity_type'] . '/' . $variables['entity']->nid,
+        'options' => array(),
+      );
+      case 'node':
+        $element['path'] = array(
+          'path' => 'node/'. $item['nid'],
+          'options' => array(),
+      );
+      break;
+      break;
+    }
+    $html .= theme('image_formatter', $element);
+
+    if ($conf['inlinetitle'] && !empty($item['title'])) {
+      $html .= '<div class="portales7_slideshow-bottom">';
+      $html .= '<div class="portales7_slideshow-field-title">' . $item['title'] . '</div>';
+      $html .= '</div>';
+    }
+    $html .= '</div>';
+  }
+  $html .= '</div>';
+  if (!empty($conf['showcontrols'])) {
+    $html .= '<div class="portales7_slideshow-controls">
+              <div class="portales7_slideshow-prev-slide"><a href="#" id="' . $slideshow_id . '-prev-slide">' . t('Prev') . '</a></div>
+              <div class="portales7_slideshow-next-slide"><a href="#" id="' . $slideshow_id . '-next-slide">' . t('Next') . '</a></div>
+              </div>';
+  }
+
+  drupal_add_library('jquery_plugin', 'cycle');
+  drupal_add_js("
+    (function ($) {
+      $(document).ready(function() {
+        $('#portales7-slideshow-{$variables['node']->nid}').cycle({
+        fx: '{$conf['effect']}',
+        speed: '{$conf['speed']}',
+        timeout: '{$conf['timeout']}'
+      });
+      $('#{$slideshow_id}-prev-slide').click(function (){
+        $('#{$slideshow_id}').cycle('prev');
+        return false;
+      });
+      $('#{$slideshow_id}-next-slide').click(function (){
+        $('#{$slideshow_id}').cycle('next');
+        return false;
+      });
+    })}) (jQuery);", 'inline');
+
+  return $html;
+}
+function theme_portales7_slideshow_definitive_formatter($variables) {
+  drupal_add_css(drupal_get_path('module', 'portales7_slideshow') . '/portales7_slideshow.css');
+  $elements = $variables['items'];
+  $conf = $variables['conf'];
+  $variables['classes'][] = (count($elements) > 1) ? 'portales7_slideshow-multiple' : 'portales7_slideshow-simple';
+  $classes = !empty($variables['classes']) ? join(' ', $variables['classes']) : '';
+  $html = '<div class="portales7_slideshow ' . $classes . '" id="' . $conf['id'] . '">';
+  $visible = '';
+  foreach ($elements as $key => $item) {
+    $html .= '<div class="portales7_slideshow-slide" '. $visible . '>';
+    $visible = ' style="display: none"';
+    $html .= $item;
+    $html .= '</div>';
+  }
+  $html .= '</div>';
+  if (!empty($conf['showcontrols'])) {
+    $html .= '<div class="portales7_slideshow-controls">
+              <div class="portales7_slideshow-prev-slide"><a href="#" id="' . $conf['id'] . '-prev-slide">' . t('Prev') . '</a></div>
+              <div class="portales7_slideshow-next-slide"><a href="#" id="' . $conf['id'] . '-next-slide">' . t('Next') . '</a></div>
+              </div>';
+  }
+
+  drupal_add_library('jquery_plugin', 'cycle');
+  drupal_add_js("
+    (function ($) {
+      $(document).ready(function() {
+        $('#{$conf['id']}').cycle({
+        fx: '{$conf['effect']}',
+        speed: '{$conf['speed']}',
+        timeout: '{$conf['timeout']}'
+      });
+      $('#{$conf['id']}-prev-slide').click(function (){
+        $('#{$conf['id']}').cycle('prev');
+        return false;
+      });
+      $('#{$conf['id']}-next-slide').click(function (){
+        $('#{$conf['id']}').cycle('next');
+        return false;
+      });
+    })}) (jQuery);", 'inline');
+
+  return $html;
+}
+
+function theme_portales7_slideshow_carousel_formatter($variables) {
+  drupal_add_css(drupal_get_path('module', 'portales7_slideshow') . '/portales7_slideshow.css');
+  $elements = $variables['items'];
+  $conf = $variables['conf'];
+  if (!isset($conf['autoplay']) || !is_numeric($conf['autoplay'])) $conf['autoplay'] = 'false';
+  $variables['classes'][] = (count($elements) > 1) ? 'portales7_slideshow-multiple' : 'portales7_slideshow-simple';
+  $classes = !empty($variables['classes']) ? join(' ', $variables['classes']) : '';
+  $html = '<div class="portales7_owlcarousel ' . $classes . '" id="' . $conf['id'] . '">';
+  $visible = '';
+  foreach ($elements as $key => $item) {
+    $html .= '<div class="portales7_owlcarousel-slide" '. $visible . '>';
+    //$visible = ' style="display: none"';
+    $html .= $item;
+    $html .= '</div>';
+  }
+  $html .= '</div>';
+
+  drupal_add_library('portales7_slideshow', 'owl-carousel');
+  drupal_add_js("
+    (function ($) {
+      $(document).ready(function() {
+        $('#{$conf['id']}').owlCarousel({
+          items : {$conf['itemsInitial']},
+          itemsDesktop : {$conf['itemsDesktop']},
+          itemsDesktopSmall : {$conf['itemsDesktopSmall']},
+          itemsTablet : {$conf['itemsTablet']},
+          itemsMobile : {$conf['itemsMobile']},
+          autoPlay: {$conf['autoplay']}
+        });
+      })
+    }) (jQuery);", 'inline');
+
+  if (!empty($conf['showcontrols'])) {
+    $html .= '<div class="portales7_owlcarousel-controls">
+              <div class="portales7_owlcarousel-prev-slide"><a href="#" id="' . $conf['id'] . '-prev-slide">' . t('Prev') . '</a></div>
+              <div class="portales7_owlcarousel-next-slide"><a href="#" id="' . $conf['id'] . '-next-slide">' . t('Next') . '</a></div>
+              </div>';
+    drupal_add_js("
+      (function ($) {
+        $(document).ready(function() {
+          $('#{$conf['id']}-prev-slide').click(function (){
+            $('#{$conf['id']}').trigger('owl.prev');
+            return false;
+          });
+          $('#{$conf['id']}-next-slide').click(function (){
+            $('#{$conf['id']}').trigger('owl.next');
+            return false;
+          });
+        })
+      }) (jQuery);", 'inline');
+  }
+  return $html;
+}
+
+function theme_portales7_slideshow_kenburns_formatter($variables) {
+  drupal_add_css(drupal_get_path('module', 'portales7_slideshow') . '/portales7_slideshow.css');
+  drupal_add_css(drupal_get_path('module', 'portales7_slideshow') . '/css/kenburns.css');
+  $conf = $variables['conf'];
+  $images = array();
+  if (empty($conf['image_style'])) {
+    foreach ($variables['items'] as $item) {
+      $images[] = file_create_url($item['uri']);
+    }
+  }
+  else {
+    foreach ($variables['items'] as $item) {
+      $images[] = image_style_url($conf['image_style'], $item['uri']);
+    }
+  }
+  $images = json_encode($images);
+  $variables['classes'][] = (count($elements) > 1) ? 'portales7_slideshow-multiple' : 'portales7_slideshow-simple';
+  $classes = !empty($variables['classes']) ? join(' ', $variables['classes']) : '';
+  $html = "<div class=\"portales7_kenburns $classes\" id=\"{$conf['id']}\" style=\"width: {$conf['width']}px; height:{$conf['height']}px;\"></div>";
+  $visible = '';
+
+  drupal_add_library('portales7_slideshow', 'kenburns');
+  drupal_add_js("
+    (function ($) {
+      $(document).ready(function() {
+        $('#{$conf['id']}').Kenburns({
+          images : {$images},
+          scale: {$conf['scale']},
+          duration: {$conf['duration']},
+          fadeSpeed: {$conf['fadeSpeed']},
+          ease3d: '{$conf['ease3d']}'
+        });
+      })
+    }) (jQuery);", 'inline');
+  return $html;
+}
+
+/**
+ * Implements hook_library().
+ */
+function portales7_slideshow_library() {
+  $library = libraries_get_path('owl-carousel');
+
+  $libraries['owl-carousel'] = array(
+    'title' => 'Owl Carousel',
+    'website' => 'http://owlgraphic.com/owlcarousel',
+    'version' => array(),
+    'js' => array(
+      $library . '/owl.carousel.min.js' => array(
+        'scope' => 'footer',
+      ),
+    ),
+    'css' => array(
+      $library . '/owl.carousel.css' => array(
+        'type' => 'file',
+        'media' => 'screen',
+      ),
+      $library . '/owl.theme.css' => array(
+        'type' => 'file',
+        'media' => 'screen',
+      ),
+      $library . '/owl.transitions.css' => array(
+        'type' => 'file',
+        'media' => 'screen',
+      ),
+    ),
+  );
+
+
+  $library = libraries_get_path('kenburns');
+
+  $libraries['kenburns'] = array(
+    'title' => 'Ken Burns Effect',
+    'website' => 'http://www.toymakerlabs.com/kenburns',
+    'version' => array(),
+    'js' => array(
+      $library . '/kenburns.js' => array(
+        'scope' => 'footer',
+      ),
+    ),
+  );
+
+  return $libraries;
+}
+
+
+/**
+ * Implements hook_menu()
+ */
+function portales7_slideshow_menu() {
+  $items = array(
+      'admin/dashboard/portales7/slideshow' => array(
+          'title' => 'Configure Portales 7 slideshow',
+          'description' => 'Configure Portales 7 slideshow settings',
+          'access arguments' => array('administer content'),
+          'page callback' => 'drupal_get_form',
+          'page arguments' => array('portales7_slideshow_admin'),
+          'type' => MENU_LOCAL_TASK,
+      ),
+      );
+  return $items;
+}
+
+/**
+ * Creates the settings form to tune how portales7_slideshow works.
+ * @return themed settings form
+ */
+function portales7_slideshow_admin() {
+  $conf = variable_get('portales7_slideshow_options', _portales7_slideshow_default_options());
+  $form['portales7_slideshow_imagecache_filter'] = array(
+          '#type' => 'textfield',
+          '#title' => t('Imagecache filter'),
+          '#description' => t('Filter to limit the number of posible choices as a PCRE. For example <em>/^pm2_slideshow_/</em> shows only imagecache presets starting with pm2_slideshow_.'),
+          '#default_value' => variable_get('portales7_slideshow_imagecache_filter', '/^pm2_slideshow_/'),
+  );
+  /*$form['portales7_slideshow_showcontrols'] = array(
+          '#type' => 'checkbox',
+          '#title' => t('Show controls'),
+          '#description' => t('Show controls at the bottom of the slideshow'),
+          '#defaullt_value' => 1,
+          '#checked' => variable_get('portales7_slideshow_showcontrols', 0),
+  );*/
+  $form['portales7_slideshow_options'] = array(
+      '#tree' => TRUE,
+      '#type' => 'fieldset',
+      '#title' => t('Slideshow options'),
+      '#collapsible' => TRUE,
+      '#collapsed' => FALSE,
+  );
+  $form['portales7_slideshow_options']['inlinetitle'] = array(
+          '#type' => 'checkbox',
+          '#title' => t('Show image title'),
+          '#description' => t('Show image title'),
+          '#return_value' => 1,
+          '#default_value' => $conf['inlinetitle'],
+  );
+  $form['portales7_slideshow_options']['effect'] = array(
+      '#type' => 'select',
+      '#multiple' => FALSE,
+      '#title' => t('Transition effect'),
+      '#description' => t('Choose wich transition effect slideshow will use'),
+      '#options' => _portales7_slideshow_available_effects(),
+      '#default_value' => $conf['effect'],
+  );
+  $form['portales7_slideshow_options']['timeout'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Duration'),
+      '#description' => t('How much time, in milliseconds, will be shown every item.'),
+      '#default_value' => $conf['timeout'],
+      '#required' => TRUE,
+  );
+  $form['portales7_slideshow_options']['speed'] = array(
+        '#type' => 'textfield',
+        '#title' => t('Speed'),
+        '#description' => t('Duration, in milliseconds, of the transition effect.'),
+        '#default_value' => $conf['speed'],
+        '#required' => TRUE,
+  );
+
+  return system_settings_form($form);
+}
+
+/**
+ * Implementation of hook_ctools_plugin_directory().
+ */
+function portales7_slideshow_ctools_plugin_directory($module, $plugin) {
+  if ($module == 'ctools') {
+    return 'plugins/' . $plugin;
+  }
+}
+
+
+function _portales7_slideshow_default_options() {
+  return array('nid' => 0, 'format' => 'original', 'effect' => 'blindX', 'speed' => 1000, 'timeout' => 4000, 'inlinetitle' => 1 );
+}
+
+function _portales7_slideshow_available_effects() {
+  return array('none' => 'none', 'blindX' => 'blindX', 'blindY' => 'blindY', 'blindZ' => 'blindZ',
+                 'cover' => 'cover', 'curtainX' => 'curtainX', 'curtainY' => 'curtainY', 'fade' => 'fade',
+                 'fadeZoom' => 'fadeZoom', 'growX' => 'growX', 'growY' => 'growY', 'scrollUp' => 'scrollUp',
+                 'scrollDown' => 'scrollDown', 'scrollLeft' => 'scrollLeft', 'scrollRight' => 'scrollRight',
+                 'scrollHorz' => 'scrollHorz', 'scrollVert' => 'scrollVert', 'shuffle' => 'shuffle',
+                 'slideX' => 'slideX', 'slideY' => 'slideY', 'toss' => 'toss', 'turnUp' => 'turnUp',
+                 'turnDown' => 'turnDown', 'turnLeft' => 'turnLeft', 'turnRight' => 'turnRight',
+                 'uncover' => 'uncover', 'wipe' => 'wipe', 'zoom' => 'zoom');
+}
+
+function portales7_slideshow_get_view() {
+  return portales7_listado_get_view();
+}

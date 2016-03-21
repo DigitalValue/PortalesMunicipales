@@ -1,0 +1,5 @@
+name = Portales 7 AEMET
+description = Provides AEMET forecast to Portales 7
+core = 7.x
+package = Portales 7 by Digital Value, SL.
+version = 0.2-dev

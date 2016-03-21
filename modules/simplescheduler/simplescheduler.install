@@ -1,0 +1,129 @@
+<?php
+/**
+ * @file
+ * Install, update, and uninstall functions for simplescheduler module
+ * @author juanjo_dv
+ * @author Digital Value, SL http://www.digitalvalue.es
+ */
+
+
+/**
+ * Implements hook_schema().
+ */
+function simplescheduler_schema() {
+  $schema = array();
+  $schema['simplescheduler'] = array(
+    'description' => 'The base table for simpleschedule operations',
+    'fields' => array(
+      'schid' => array(
+        'description' => 'The primary identifier for simpleschedule operations',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'nid' => array(
+        'description' => 'The identifier for node to apply operations',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'uid' => array(
+        'description' => 'The identifier for user who schedules the operation',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'opdate' => array(
+        'description' => 'The date when the operation must be made',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'operation' => array(
+        'description' => 'The operation to perform',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'status' => array(
+        'description' => 'The status of the operation',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'performed' => array(
+        'description' => 'The date when the operation was attempted',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'indexes' => array(
+      'nid' => array('nid'),
+      'uid' => array('uid'),
+      'opdate' => array('opdate'),
+      'operation' => array('operation'),
+      'status' => array('status'),
+      'performed' => array('performed'),
+    ),
+    'primary key' => array('schid'),
+  );
+  return $schema;
+}
+
+/**
+ * Implements hook_install().
+ */
+function simplescheduler_install() {
+  try {
+    if (db_table_exists('scheduler')) {
+      global $user;
+      $res = db_select('scheduler', 's')->fields('s', array())->execute()->fetchAll();
+      $insert = db_insert('simplescheduler')->fields(array('nid', 'uid', 'opdate', 'operation'));
+      $ops = 0;
+      foreach ($res as $row) {
+        if (!empty($row->publish_on)) {
+          $insert->values(array('nid' => $row->nid, 'uid' => $user->uid, 'opdate' => $row->publish_on, 'operation' => 'publish'));
+          $ops++;
+        }
+        if (!empty($row->unpublish_on)) {
+          $insert->values(array('nid' => $row->nid, 'uid' => $user->uid, 'opdate' => $row->unpublish_on, 'operation' => 'unpublish'));
+          $ops++;
+        }
+      }
+      $insert->execute();
+      if ($ops > 0) {
+        return format_plural($ops, 'One operation scheduled', '@count operations scheduled', array('@count' => $ops));
+      }
+    }
+  }
+  catch (Exception $e) {
+    drupal_set_message($e->getMessage(), 'error');
+    throw $e;
+  }
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function simplescheduler_uninstall() {
+  varible_del('simplescheduler_cron_last_run');
+}
+
+/**
+ * Expand operation field to allow new operations
+ */
+function simplescheduler_update_7001() {
+  $schema = simplescheduler_schema();
+  db_drop_index('simplescheduler', 'operation');
+  db_change_field('simplescheduler', 'operation', 'operation', $schema['simplescheduler']['fields']['operation'], array('operation' => array('operation')));
+  db_add_field('simplescheduler', 'performed', array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ), array('performed' => array('performed')));
+}
+

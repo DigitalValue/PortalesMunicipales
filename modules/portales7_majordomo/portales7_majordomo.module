@@ -1,0 +1,93 @@
+<?php
+
+module_load_include('inc', 'portales7_majordomo', 'portales7_majordomo.util');
+
+/**
+* Implementation of hook_ctools_plugin_dierctory() to let the system know
+* where our content_type plugins are.
+*/
+function portales7_majordomo_ctools_plugin_directory($module, $plugin) {
+    if ($module == 'ctools') {
+        return 'plugins/' . $plugin;
+    }
+}
+
+
+function portales7_majordomo_subscription($form, $form_state, $opt = array()){
+    $form['info'] = array(
+      '#markup' => '
+      <div id="verboletin" class="verboletin">
+        <a href="http://besana.portalesmunicipales.es/boletin">
+        <img src="http://besana.portalesmunicipales.es/sites/default/files/boton_boletin_besana.png">
+        </a>
+      </div>',        
+    );
+    $form['email'] = array(
+        '#title' => t('Email'),
+        '#description' => t('Email address to subscribe to list'),
+        '#type' => 'textfield',
+        '#default_value' => t('Your email'),
+        '#required' => TRUE,
+    );
+    $form['submit'] = array(
+        '#type' => 'submit',
+        '#value' => t('Susbcribe'),
+    );
+    
+    if (empty($opt['title'])) unset($form['email']['#title']);
+    if (empty($opt['description'])) unset($form['email']['#description']);
+    return $form;
+}
+
+function portales7_majordomo_subscription_submit(&$form, $form_state) {
+    $email = $form_state['values']['email'];
+    #dsm(func_get_args(), __FUNCTION__);
+    if (_portales7_majordomo_add_subscriber($email)) {
+        drupal_set_message(t('@email has been subscribed' , array('@email' => $email)), 'status');
+    }
+    else {
+        drupal_set_message(t('Can\'t subscribe @email to list', array('@email' => $email)), 'error');
+    }
+    
+    if (!empty($_REQUEST['destination'])) { drupal_goto($_REQUEST['destination']);}
+    if (!empty($_SERVER['HTTP_REFERER'])) { drupal_goto($_SERVER['HTTP_REFERER']);}
+    drupal_goto('<front>');
+}
+
+function portales7_majordomo_menu() {
+  $items['admin/portales7/majordomo'] = array(
+    'title' => 'Majordomo',
+    'description' => 'Setup Majordomo distribution lists',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('portales7_majordomo_admin'),
+    'access arguments' => array('administer portales7'),
+    'file' => 'portales7_majordomo.admin.inc',
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['portales7/activate-subscription'] = array(
+    'title' => t('Activate subscription'),
+    'description' => t('Subscription activation page'),
+    'page callback' => 'portales7_majordomo_activate_subscription',
+    'access arguments' => array('access content'),
+    'type' => MENU_NORMAL_ITEM,
+    'weight' => -9,
+  );
+  return $items;
+}
+
+function portales7_majordomo_activate_subscription() {  
+  if(($email = _portales7_majordomo_activate_subscription(arg(2))) !== FALSE){
+    $output = <<< EOD
+<p>Your account has been activated, you will receive newsletters at @email.<br />
+You can unsubscribe using the links included on every newsletter.</p>
+EOD;
+    drupal_set_message(t($output,array('@email' => $email)), 'status');
+  }
+  else {
+    drupal_set_message(t('Your subscription can\'t be activated, please check again later.'), 'error');
+  }
+  drupal_goto('<front>');  
+}
+
+
+

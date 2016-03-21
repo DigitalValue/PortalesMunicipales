@@ -1,0 +1,7 @@
+name = Majordomo Lists
+description = Provides majordomo mailing lists integration for Portales 7
+core = 7.x
+package = Portales 7 by Digital Value, SL.
+dependencies[] = portales7
+
+ 

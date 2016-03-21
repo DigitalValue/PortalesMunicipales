@@ -1,0 +1,7 @@
+name = PDF2Images
+description = Show pdfs as a collection of images.
+package = Media
+core = 7.x
+dependencies[] = imagemagick
+dependencies[] = image
+

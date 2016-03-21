@@ -1,0 +1,173 @@
+<?php
+define('PORTALES7_AEMET_DETAIL_LEVEL_LOW', 1);
+define('PORTALES7_AEMET_DETAIL_LEVEL_MED', 2);
+define('PORTALES7_AEMET_DETAIL_LEVEL_HIGH', 3);
+define('PORTALES7_AEMET_PATH', 'portales7/weather-forecast');
+/**
+ * Implements of hook_ctools_plugin_dierctory() to let the system know
+ * where our content_type plugins are.
+ */
+function portales7_aemet_ctools_plugin_directory($module, $plugin) {
+  if ($module == 'ctools') {
+      return 'plugins/' . $plugin;
+  }
+}
+
+function portales7_aemet_theme($existing, $type, $theme, $path) {
+  return array(
+    'aemet_day_array' => array(
+      'variables' => array('day' => array(), 'level' => PORTALES7_AEMET_DETAIL_LEVEL_LOW),
+      'file' => 'portales7_aemet.theme.inc',
+      'function' => 'theme_portales7_aemet_day_array',
+    ),
+    'aemet_day' => array(
+      'variables' => array('day' => array(), 'level' => PORTALES7_AEMET_DETAIL_LEVEL_LOW),
+      'file' => 'portales7_aemet.theme.inc',
+      'template' => 'aemet_day',
+    ),
+    'aemet_widget' => array(
+      'variables' => array('forecast' => array(), 'conf' => array(), 'level' => PORTALES7_AEMET_DETAIL_LEVEL_LOW),
+      'file' => 'portales7_aemet.theme.inc',
+      'template' => 'aemet_widget',
+    ),
+    'aemet_variables' => array(
+      'variables' => array('conf' => array()),
+      'file' => 'portales7_aemet.theme.inc',
+      'function' => 'theme_aemet_variables',
+    ),
+  );
+}
+
+function portales7_aemet_menu() {
+  $items[PORTALES7_AEMET_PATH] = array(
+    'title' => 'Weather forecast',
+    'description' => 'View forecast on specified city.',
+    'access arguments' => array('access content'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('portales7_aemet_forecast'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items['admin/portales7/aemet'] = array(
+    'title' => 'Forecast',
+    'description' => 'Configure weather forecast options.',
+    'access arguments' => array('administer portales7'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('portales7_aemet_admin'),
+    'file' => 'portales7_aemet.admin.inc',
+    'type' => MENU_LOCAL_TASK,
+  );
+  return $items;
+}
+
+function portales7_aemet_forecast(&$form, &$form_state) {
+  module_load_include('inc', 'portales7_aemet', 'portales7_aemet.provincias');
+  if (!empty($_SESSION['aemet_forecast'])) {
+    drupal_set_title(t('Weather forecast for @name', array('@name' => $_SESSION['aemet_forecast']['nombre'])));
+    $form['aemet_forecast'] = array(
+    '#markup' => theme('aemet_widget', array_merge($_SESSION['aemet_forecast'], array('conf' => _portales7_aemet_defaults()))),
+    );
+  }
+
+  $form['provincia'] = array(
+    '#type' => 'select',
+    '#title' => t('Provincia'),
+    '#options' => _portales7_aemet_get_provincias(),
+    '#default_value' => isset($_SESSION["provincia"]) ? $_SESSION["provincia"] : 1,
+    '#ajax' => array(
+      'callback' => '_portales7_aemet_cargar_municipios_AJAX',
+      'wrapper' => 'ine_div',
+    ),
+
+  );
+
+  if ( isset($_SESSION['provincia']) == FALSE) {
+    $_SESSION['provincia'] = 1;
+  }
+
+  if (isset($form_state['values']['provincia']) == TRUE) {
+    $form['ine'] = array(
+      '#type' => 'select',
+      '#title' => t('Municipio'),
+      '#prefix' => '<div id="ine_div">',
+      '#suffix' => '</div>',
+      '#options' => _portales7_aemet_cargar_municipios($form_state['values']['provincia']),
+      '#default_value' => empty($_SESSION['aemet_forecast_ine']) ? '' : $_SESSION['aemet_forecast_ine'],
+    );
+  }
+  else {
+    $form['ine'] = array(
+      '#type' => 'select',
+      '#title' => t('Municipio'),
+      '#prefix' => '<div id="ine_div">',
+      '#suffix' => '</div>',
+      '#options' => _portales7_aemet_cargar_municipios($_SESSION['provincia']),
+      '#default_value' => empty($_SESSION['aemet_forecast_ine'])? '' : $_SESSION['aemet_forecast_ine'],
+    );
+  }
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('View forecast'),
+  );
+
+  return $form;
+
+}
+
+function portales7_aemet_forecast_submit($form, &$form_state) {
+  module_load_include('inc', 'portales7_aemet', 'portales7_aemet.util');
+  $ine = $form_state['values']['ine'];
+
+  if ($ine != 0) {
+    $forecast = _portales7_aemet_get_forecast($ine);
+    $_SESSION['provincia'] = $form_state['values']['provincia'];
+    $_SESSION['aemet_forecast_ine'] = $ine;
+    $_SESSION['aemet_forecast'] = $forecast;
+    drupal_goto(PORTALES7_AEMET_PATH);
+  }
+
+}
+
+function _portales7_aemet_cargar_municipios($prov) {
+  $_SESSION['provincia'] = $prov;
+  module_load_include('inc', 'portales7_aemet', 'portales7_aemet.municipios');
+  return _portales7_aemet_get_municipios($prov);
+}
+
+function _portales7_aemet_cargar_municipios_AJAX($form, $form_state) {
+  //error_log(print_r(array("form" => $form, 'form_state' => $form_state, 'session' => $_SESSION),1),3, '/tmp/ajax.log');
+  return $form['ine'];
+}
+
+function _portales7_aemet_cargar_municipios_AJAX_ctools($form, $form_state) {
+  //error_log(print_r(array("form" => $form, 'form_state' => $form_state, 'session' => $_SESSION),1),3, '/tmp/ajax.log');
+  $form['ine'] = array(
+    '#type' => 'select',
+    '#title' => t('Municipio'),
+    '#prefix' => '<div id="ine_div">',
+    '#suffix' => '</div>',
+    '#options' => _portales7_aemet_cargar_municipios($form_state['values']['provincia']),
+  );
+  //dsm('provincia: '. $form_state['values']['provincia'], 'status');
+  return $form['ine'];
+}
+
+function _portales7_aemet_defaults() {
+  return array(
+    'language' => 'es',
+    'city' => '',
+    'ine' => '',
+    'provincia' => '',
+    'days' => variable_get('portales7_aemet_days' , 4),
+    'options' => variable_get('portales7_aemet_options', array('estado_cielo' => 'estado_cielo', 'temperatura' => 'temperatura')),
+    'border' => '',
+    'disposition' => 'h',
+    'width' => '290',
+    'height' => '200',
+    'primary_color' => 'ffffff',
+    'second_color' => '4f86d9' ,
+    'third_color' => '95b6e9',
+    'show_variables' => variable_get('portales7_aemet_show_variables', 'show_variables'),
+  );
+}
+

@@ -1,0 +1,62 @@
+<?php
+function portales7_majordomo_schema() {
+  return array(
+  'subscriptions' => array(
+    'fields' => array(
+      'sid' => array(
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'Primary Key: Unique suscription ID.',
+      ),
+      'email' => array(
+        'type' => 'varchar',
+        'length' => 64,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => "User's email address.",
+      ),
+      'pass' => array(
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => "User's password (md5 hash).",
+      ),
+      'active' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'unsigned' => TRUE,
+        'default' => 0,
+        'description' => 'Is active the account?',
+      ),
+      'created' => array(
+      'type' => 'int',
+      'not null' => TRUE,
+      'default' => 0,
+      'description' => 'Timestamp for when list was created.',
+      ),
+      'updated' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Timestamp for when list was updated.',
+      ),
+      'activation_code' => array(
+        'type' => 'varchar',
+        'length' => 16,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'Activation code for subscriptions'
+      ),
+    ),
+    'primary key' => array('sid'),
+    'indexes' => array(
+      'activation_code' => array('activation_code'),
+    ),
+    'unique keys' => array(
+      'email' => array('email'),
+    ),
+  ),
+  );
+}

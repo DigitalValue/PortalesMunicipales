@@ -1,0 +1,6 @@
+name = Portales 7 send
+description = Sends a page by email
+core = 7.x
+package = Portales 7 by Digital Value, SL.
+dependencies[] = portales7
+dependencies[] = mimemail

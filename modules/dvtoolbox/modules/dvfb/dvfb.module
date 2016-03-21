@@ -1,0 +1,255 @@
+<?php
+/**
+ * Implements hook_ctool_plugin_directory
+ */
+ 
+
+use Facebook\FacebookSession;
+use Facebook\FacebookRedirectLoginHelper;
+use Facebook\FacebookRequest;
+use Facebook\GraphUser;
+
+function dvfb_ctools_plugin_directory($module, $plugin) {
+  if ($module == 'ctools' && !empty($plugin)) {
+   return "plugins/$plugin";
+ }
+}
+
+function dvfb_admin_form() {
+  $form['dvfb_appid'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Facebook application id'),
+    '#default_value' => variable_get('dvfb_appid', ''),
+  );
+  $form['dvfb_appsecret'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Secret'),
+    '#default_value' => variable_get('dvfb_appsecret', ''),
+  );
+  return system_settings_form($form);
+}
+
+function dvfb_init() {
+  try {
+    if (variable_get('dvfb_appid', FALSE)) {
+      $fb_lib_path = function_exists('libraries_get_path') ? libraries_get_path('facebook-php-sdk') : 'sites/all/libraries/facebook-php-sdk';
+      $fb_platform = $fb_lib_path . '/autoload.php';
+      include($fb_platform);
+      FacebookSession::setDefaultApplication(variable_get('dvfb_appid', ''), variable_get('dvfb_appsecret', ''));
+      if (($_GET['q'] != 'dvfb/logout') && ($_GET['q'] != 'dvfb/login') && ($fbuser = dvfb_normalize_user())) {
+        drupal_add_js(array('dvfb_user' => $fbuser), 'setting');
+      }
+    }
+    else {
+      drupal_set_message(t('Facebook application not configured.'), 'error');
+    }
+  }
+  catch (Exception $e){
+    drupal_set_message(__FUNCTION__ . ': ' . $e->getMessage());
+  }
+}
+
+function dvfb_helper($path = NULL) {
+  if (variable_get('dvfb_appid', FALSE)) {
+    if (empty($path)) $path = $_GET['q'];
+    if (($path == 'dvfb/login') && !empty($_GET['destination'])) $path = $_GET['destination'];
+    $helpers = &drupal_static(__FUNCTION__);
+    if (empty($helpers[$path])) {
+      $helper = new FacebookRedirectLoginHelper(url('dvfb/login', array('absolute' => TRUE, 'query' => array('destination' => $path))),variable_get('dvfb_appid', ''), variable_get('dvfb_appsecret', ''));
+      $helpers[$path] = $helper;
+    }
+    return $helpers[$path];
+  }
+}
+
+function dvfb_session() {
+  if (!variable_get('dvfb_appid', FALSE)) return;
+  $session = &drupal_static(__FUNCTION__);
+  if (empty($session)) {
+    global $user;
+    try {
+      $helper = dvfb_helper();
+      if ($user->uid == 0) $helper->disableSessionStatusCheck();
+      if (empty($_SESSION['fb_token'])) {
+        if (!empty($helper)) {$session = $helper->getSessionFromRedirect();}
+        else { drupal_set_message('empty helper', 'error');}
+        if (!empty($session)) $_SESSION['fb_token'] = $session->getAccessToken() . '';
+      }
+      else {
+        $session = new FacebookSession($_SESSION['fb_token']);
+      }
+    }
+    catch (Exception $e) {
+      drupal_set_message(__FUNCTION__ . ': ' . $e->getMessage(), 'error');
+      //drupal_set_message(__FUNCTION__ . ': <pre>' . print_r($e,1) . '</pre>', 'error');
+    }
+  }
+  return $session;
+}
+
+
+function dvfb_user() {
+  $user = &drupal_static(__FUNCTION__);
+  if (empty($user)) {
+    try {
+      $session = dvfb_session();
+      if (!empty($session)) {
+        $user = (new FacebookRequest(
+        $session, 'GET', '/me'
+        ))->execute()->getGraphObject(GraphUser::className());
+      }
+    }
+    catch (Exception $e) {
+      drupal_set_message(__FUNCTION__ . ': ' . $e->getMessage(), 'error');
+      return FALSE;
+    }
+  }
+  return $user;
+}
+
+function dvfb_menu() {
+  $items = array();
+  $items['admin/config/jsapp/dvfb'] = array(
+    'title' => 'Setup DVFB',
+    'description' => t('Configure DV Facebook application'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('dvfb_admin_form'),
+    'access arguments' => array('administer drupal'),
+  );
+  $items['dvfb/logout'] = array(
+    'title' => 'DVFB logout',
+    'description' => t('Logs out FB session from the site'),
+    'page callback' => 'dvfb_logout',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );
+  $items['dvfb/login'] = array(
+    'title' => 'DVFB login',
+    'description' => t('Logs in FB session from the site'),
+    'page callback' => 'dvfb_login',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+function dvfb_login() {
+  dvfb_user();
+  drupal_goto();
+}
+
+function dvfb_logout() {
+  unset($_SESSION['fb_token']);
+  drupal_static_reset('dvfb_session');
+  drupal_static_reset('dvfb_helper');
+  drupal_static_reset('dvfb_user');
+  drupal_goto();
+}
+
+function dvfb_theme($existing, $type, $theme, $path) {
+  return array(
+    'dvfb_user' => array(
+      'template' => 'dvfb_user',
+      'variables'=> array('style_name' => 'original', 'dvfb_user' => NULL),
+      'path' => drupal_get_path('module', 'dvfb') . '/templates',
+    ),
+    'dvfb_login_button' => array(
+      'function' => 'theme_dvfb_login_button',
+      'variables' => array(),
+    ),
+  );
+}
+
+function dvfb_preprocess_dvfb_user(&$vars) {
+  drupal_add_css(drupal_get_path('module', 'dvfb') . '/css/dvfb.css');
+  if (empty($vars['dvfb_user'])) {
+    $vars['dvfb_user'] = dvfb_user();
+  }
+  
+  $user_profile = $vars['dvfb_user'];
+  $helper = dvfb_helper();
+  $session = dvfb_session();
+  $icon_src = drupal_get_path('module', 'dvfb') . '/images/f_logo.png'; 
+  if (!empty($vars['style_name'])) {
+    $style = image_style_load($vars['style_name']);
+    $icon = image_style_path($style['name'], $icon_src);
+    if (!file_exists($fb_icon)) {
+      image_style_create_derivative($style, $icon_src, $icon);
+    }
+  }
+  else {
+    $icon = $icon_src;
+  }
+  $vars['icon_tag'] = theme('image', array('path' => $icon, 'alt' => 'Facebook icon', 'height' => '20px', 'width' => '20px'));
+  if ($user_profile instanceof GraphUser) {
+    $vars['name'] = $user_profile->getFirstName();
+    $vars['userId'] = $user_profile->getId();
+  } else {
+    $vars['loginUrl'] = $helper->getLoginUrl();
+  }
+  return $vars;
+}
+
+function dvfb_normalize_user($fbuser = NULL) {
+  if (is_null($fbuser)) $fbuser = dvfb_user();
+  if (!($fbuser instanceof GraphUser)) return NULL;
+  return array(
+    'network' => 'facebook',
+    'id' => $fbuser->getId(),
+    'first_name' => $fbuser->getFirstName(),
+    'last_name' => $fbuser->getLastName(),
+    'link' => $fbuser->getLink(),
+    'name' => $fbuser->getName(),
+    'middle_name' => $fbuser->getMiddleName(),
+    'birthday' => $fbuser->getBirthday(),
+    'location' => $fbuser->getLocation(),
+  );
+}
+
+function theme_dvfb_login_button(&$vars) {
+  drupal_add_css(drupal_get_path('module', 'dvfb') . '/css/dvfb.css');
+  try {
+    if ($helper = dvfb_helper()) {
+      $loginUrl = $helper->getLoginUrl();
+    }
+    else {
+      return;
+    }
+  }
+  catch (Exception $e){
+    drupal_set_message(__FUNCTION__ . ': ' . $e->getMessage(), 'error');
+  }
+  $icon_src = drupal_get_path('module', 'dvfb') . '/images/f_logo.png';
+  if (!empty($vars['style_name'])) {
+    $style = image_style_load($vars['style_name']);
+    $icon = image_style_path($style['name'], $icon_src);
+    if (!file_exists($fb_icon)) {
+      image_style_create_derivative($tyle, $icon_src, $icon);
+    }
+  }
+  else {
+    $icon = $icon_src;
+  }
+  $icon_tag = theme('image', array('path' => $icon, 'alt' => 'Facebook icon', 'height' => '20px', 'width' => '20px'));
+  $link = l($icon_tag . '&nbsp;' . t('Login with facebook'), $loginUrl, array('html' => TRUE, 'attributes' => array('class' => array('dvfb-login'))));
+  $output = <<<EOD
+  <div class="dvfb-anon">
+<span class="link">
+<div>$link</div>
+</span>
+</div>
+EOD;
+  return $output;
+}
+
+function dvfb_jsapp_user() {
+  return array('facebook' => dvfb_normalize_user());
+}
+
+function dvfb_jsapp_login_button($vars) {
+  return array('facebook' => theme('dvfb_login_button', $vars));
+}
+
+function dvfb_jsapp_themed_user($vars) {
+  return array('facebook' => theme('dvfb_user', $vars));
+}

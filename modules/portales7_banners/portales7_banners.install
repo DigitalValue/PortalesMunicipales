@@ -1,0 +1,82 @@
+<?php
+function portales7_banners_install() {
+  if (node_type_get_type('portales7_node')){
+    $fields = array(
+      'portales7_inline_banner' => array(
+        'settings' => array(
+          'target_type' => 'node',
+          'handler' => 'base',
+          'handler_settings' => array(
+            'target_bundles' => array(
+              'portales7_banner' => 'portales7_banner',
+            ),
+            'sort' => array(
+              'type' => 'property',
+              'property' => 'title',
+              'direction' => 'ASC',
+            ),
+          ),
+        ),
+        'type' => 'entityreference',
+        'cardinality' => '-1',
+      ),
+    );
+    $instances = array(
+      'portales7_inline_banner' => array(
+        'label' => 'Banner',
+        'widget' => array(
+          'weight' => '7',
+          'type' => 'inline_entity_form',
+          'module' => 'inline_entity_form',
+          'active' => 1,
+          'settings' => array(
+            'type_settings' => array(
+              'allow_existing' => 0,
+              'match_operator' => 'CONTAINS',
+              'delete_references' => 0,
+              'override_labels' => 0,
+              'label_singular' => 'nodo',
+              'label_plural' => 'nodos',
+            ),
+          ),
+        ),
+        'display' => array(
+          'default' => array(
+            'label' => 'above',
+            'type' => 'hidden',
+            'weight' => '10',
+            'settings' => array (),
+          ),
+        ),
+        'required' => 0,
+        'description' => '',
+      ),
+    );
+    
+    field_cache_clear();
+    module_load_include('field.inc', 'dvtoolbox');
+    dvtoolbox_field_create_fields($fields);
+    dvtoolbox_field_create_instances('node', array('portales7_node' => $instances));
+    //_portales7_banners_create_banner_group();
+    $se_types = variable_get('save_edit_node_types', array());
+    $se_types['portales7_banner'] = 'portales7_banner';
+    variable_set('save_edit_node_types', $se_types);
+    variable_set('language_content_type_portales7_banner', 2);
+
+    $banners = 0;
+    if (db_table_exists('field_data_portales7_banner_group')) {
+      $query = db_select('field_data_portales7_banner_group', 'f')
+        ->fields( 'f', array('entity_id'))
+        ->condition('bundle', 'portales7_node')
+        ->execute();
+      count($query->fetchAll());
+    }
+    $t = get_t();
+    if ($banners) {
+      return format_plural($banners, '@count old style banner found. Go to !link to start migration', '@count old style banners found. Go to !link to start migration', array('@count' => $banners, '!link' => l($t('migration page'), 'admin/portales7/banners')));
+    }
+    else {
+      return $t('No old style banners to import');
+    }
+  }
+}

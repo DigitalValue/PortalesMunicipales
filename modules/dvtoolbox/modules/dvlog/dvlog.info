@@ -1,0 +1,6 @@
+name = Toolbox Log
+description = Log some actions on a shared log database
+version = 7.x-0.1
+package = by Digital Value, SL
+core = 7.x
+dependencies[] = entity

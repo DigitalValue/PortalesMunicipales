@@ -1,0 +1,11 @@
+name = Banners
+description = Provides banners for Portales 7 sites
+core = 7.x
+version = 5.1
+package = Portales 7 by Digital Value, SL.
+dependencies[] = views
+dependencies[] = dvtoolbox
+dependencies[] = inline_entity_form
+dependencies[] = entityreference
+dependencies[] = imagecache_canvasactions
+dependencies[] = epsacrop
